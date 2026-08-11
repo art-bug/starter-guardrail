@@ -165,8 +165,13 @@ class PrototypeMatcher:
         enabled: bool = False,
     ) -> None:
         self.enabled = enabled
+
         self._attack = _coerce_prototypes(attack_prototypes)
         self._benign = _coerce_prototypes(benign_prototypes)
+
+        if enabled:
+            self._require_both_classes()
+
         all_prototypes = self._attack + self._benign
 
         document_features = tuple(
@@ -177,9 +182,7 @@ class PrototypeMatcher:
         for features in document_features:
             document_frequency.update(features.keys())
         self._idf = {
-            feature: log(
-                (1 + document_count) / (1 + frequency)
-            ) + 1.0
+            feature: log((1 + document_count) / (1 + frequency)) + 1.0
             for feature, frequency in document_frequency.items()
         }
 
@@ -194,9 +197,6 @@ class PrototypeMatcher:
             zip(self._benign, vectors[attack_count:], strict=True)
         )
 
-        if enabled:
-            self._require_both_classes()
-
     @property
     def attack_labels(self) -> tuple[str, ...]:
         return tuple(prototype.label for prototype in self._attack)
@@ -207,25 +207,28 @@ class PrototypeMatcher:
                 "enabled matcher requires attack and benign prototypes"
             )
 
+    @staticmethod
     def _nearest(
-        self,
         query: Mapping[str, float],
         prototypes: tuple[tuple[LabeledPrototype, Vector], ...],
     ) -> tuple[str, float]:
-        prototype, vector = prototypes[0]
+        (prototype, vector), *prototypes = prototypes
+
         best_label = prototype.label
         best_similarity = _cosine(query, vector)
-        for prototype, vector in prototypes[1:]:
+
+        for prototype, vector in prototypes:
             similarity = _cosine(query, vector)
+
             if similarity > best_similarity:
                 best_label = prototype.label
                 best_similarity = similarity
+
         return best_label, best_similarity
 
     def match(self, text: str) -> PrototypeMatch | None:
         if not self.enabled:
             return None
-        self._require_both_classes()
 
         normalized = normalize_text(text).control_stripped
         query = (

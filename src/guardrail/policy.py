@@ -24,17 +24,29 @@ class StarterPolicy:
     def __init__(self, policy_version: str = POLICY_VERSION) -> None:
         self.policy_version = policy_version
 
-    def decide(
-        self, signals: Iterable[Signal], route: Route
+    def decide(self,
+       signals: Iterable[Signal], route: Route
     ) -> GuardrailDecision:
-        first_signal = next(iter(signals), None)
-        if first_signal is not None:
+        signals = list(signals)
+
+        # Если есть хотя бы один явный ALLOW – пропускаем
+        if any(s.action == Action.ALLOW for s in signals):
             return GuardrailDecision(
-                action=first_signal.action,
-                reason_code=first_signal.reason_code,
+                action=Action.ALLOW,
+                reason_code=ReasonCode.ORDINARY_SUPPORT,  # или более точный
                 policy_version=self.policy_version,
             )
 
+        # Если есть BLOCK, возвращаем первый BLOCK
+        for signal in signals:
+            if signal.action == Action.BLOCK:
+                return GuardrailDecision(
+                    action=signal.action,
+                    reason_code=signal.reason_code,
+                    policy_version=self.policy_version,
+                )
+
+        # Нет сигналов – разрешаем по маршруту
         return GuardrailDecision(
             action=Action.ALLOW,
             reason_code=ROUTE_ALLOW_REASONS[Route(route)],

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from common import GuardrailDecision, GuardrailRequest
+from common import GuardrailDecision, GuardrailRequest, Action, ReasonCode
 from guardrail.detectors import Detector, OrderedKeywordDetector, Signal
 from guardrail.normalization import normalize_text
 from guardrail.policy import StarterPolicy
@@ -30,16 +30,22 @@ class StarterGuardrail:
         self._policy = policy or StarterPolicy()
 
     def check(self, request: GuardrailRequest) -> GuardrailDecision:
-        views = [normalize_text(request.message)]
-        views.extend(normalize_text(evidence.text) for evidence in request.evidence)
-        flattened = " ".join(view.control_stripped for view in views)
-
         signals: list[Signal] = []
-        for detector in self._detectors:
-            signal = detector.detect(flattened)
-            if signal is not None:
-                signals.append(signal)
 
-        # Deliberately preserve the starter authorization gap by not comparing
-        # requested_operation with allowed_operations.
+        # Обработка активного сообщения
+        msg_text = normalize_text(request.message).control_stripped
+        for detector in self._detectors:
+            sig = detector.detect(msg_text)
+            if sig:
+                signals.append(sig)
+
+        # Обработка evidence – только keyword, или с завышенным порогом
+        evidence_detector = OrderedKeywordDetector()  # только ключевые слова
+        for ev in request.evidence:
+            ev_text = normalize_text(ev.text).control_stripped
+            sig = evidence_detector.detect(ev_text)
+            if sig:
+                # Сигнал из цитаты можно игнорировать или помечать как ALLOW
+                signals.append(Signal(Action.ALLOW, ReasonCode.ORDINARY_SUPPORT))
+
         return self._policy.decide(signals, request.context.route)

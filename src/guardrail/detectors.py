@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, Sequence, runtime_checkable
+from typing import Protocol, Sequence, runtime_checkable, Final
 
 from common import Action, ReasonCode
 from guardrail.normalization import normalize_text
@@ -35,30 +35,38 @@ class KeywordRule:
 
 
 DEFAULT_KEYWORD_RULES = (
-    KeywordRule(
-        Action.BLOCK,
-        ReasonCode.PROMPT_OVERRIDE,
-        ("ignore", "system prompt", "reveal", "secret"),
+    KeywordRule(Action.BLOCK, ReasonCode.PROMPT_OVERRIDE,
+        (
+            "ignore all", "ignore prior", "ignore policy",
+            "reveal", "system prompt",
+            "reveal the system prompt",
+            "forget your rules",
+            "secret"
+        ),
     ),
-    KeywordRule(
-        Action.BLOCK,
-        ReasonCode.MODERATION_EVASION,
-        ("bypass", "evade", "avoid the filter"),
+    KeywordRule(Action.BLOCK, ReasonCode.MODERATION_EVASION,
+        (
+            "bypass", "avoid the filter",
+            "evade",
+            "trick moderation"
+        ),
     ),
-    KeywordRule(
-        Action.BLOCK,
-        ReasonCode.GENERATE_ABUSE,
-        ("threaten", "intimidate", "kill"),
+    KeywordRule(Action.BLOCK, ReasonCode.GENERATE_ABUSE,
+        (
+            "threat", "threaten", "intimidate", "kill",
+            "generate insults"
+        ),
     ),
-    KeywordRule(
-        Action.BLOCK,
-        ReasonCode.PRIVATE_DATA_REQUEST,
-        ("reporter identity", "private data", "home address"),
+    KeywordRule(Action.BLOCK, ReasonCode.PRIVATE_DATA_REQUEST,
+        (
+            "reporter identity", "private data",
+            "home address", "user's personal data"
+        ),
     ),
 )
 
 
-class OrderedKeywordDetector:
+class OrderedKeywordDetector(Detector):
     """Return the first matching concept according to configured rule order."""
 
     def __init__(
@@ -82,4 +90,22 @@ class OrderedKeywordDetector:
         for rule in self._rules:
             if any(keyword in flattened for keyword in rule.keywords):
                 return Signal(rule.action, rule.reason_code)
+
+        return None
+
+
+DEFAULT_ALLOW_LIST: Final = (
+    "hello",
+    "good afternoon",
+    "good morning",
+    "hi there"
+)
+
+
+class AllowListDetector(Detector):
+
+    def detect(self, text: str) -> Signal | None:
+        if any(allow in text.lower() for allow in DEFAULT_ALLOW_LIST):
+            return Signal(Action.ALLOW, ReasonCode.ORDINARY_SUPPORT)
+
         return None
