@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Protocol, Sequence, runtime_checkable, Final
 
@@ -35,33 +36,25 @@ class KeywordRule:
 
 
 DEFAULT_KEYWORD_RULES = (
-    KeywordRule(Action.BLOCK, ReasonCode.PROMPT_OVERRIDE,
-        (
-            "ignore all", "ignore prior", "ignore policy",
-            "reveal", "system prompt",
-            "reveal the system prompt",
-            "forget your rules",
-            "secret"
-        ),
+    KeywordRule(
+        Action.BLOCK,
+        ReasonCode.PROMPT_OVERRIDE,
+        ("ignore", "system prompt", "reveal", "secret"),
     ),
-    KeywordRule(Action.BLOCK, ReasonCode.MODERATION_EVASION,
-        (
-            "bypass", "avoid the filter",
-            "evade",
-            "trick moderation"
-        ),
+    KeywordRule(
+        Action.BLOCK,
+        ReasonCode.MODERATION_EVASION,
+        ("bypass", "evade", "avoid the filter"),
     ),
-    KeywordRule(Action.BLOCK, ReasonCode.GENERATE_ABUSE,
-        (
-            "threat", "threaten", "intimidate", "kill",
-            "generate insults"
-        ),
+    KeywordRule(
+        Action.BLOCK,
+        ReasonCode.GENERATE_ABUSE,
+        ("threaten", "intimidate", "kill"),
     ),
-    KeywordRule(Action.BLOCK, ReasonCode.PRIVATE_DATA_REQUEST,
-        (
-            "reporter identity", "private data",
-            "home address", "user's personal data"
-        ),
+    KeywordRule(
+        Action.BLOCK,
+        ReasonCode.PRIVATE_DATA_REQUEST,
+        ("reporter identity", "private data", "home address"),
     ),
 )
 
@@ -88,8 +81,11 @@ class OrderedKeywordDetector(Detector):
     def detect(self, text: str) -> Signal | None:
         flattened = normalize_text(text).control_stripped
         for rule in self._rules:
-            if any(keyword in flattened for keyword in rule.keywords):
-                return Signal(rule.action, rule.reason_code)
+            for keyword in rule.keywords:
+                # Границы слова с учётом пробелов, начала/конца строки
+                pattern = r'(?<!\w)' + re.escape(keyword) + r'(?!\w)'
+                if re.search(pattern, flattened, re.IGNORECASE):
+                    return Signal(rule.action, rule.reason_code)
 
         return None
 

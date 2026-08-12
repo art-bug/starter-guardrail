@@ -38,11 +38,11 @@ class StarterPolicy:
             )
 
         # Если есть BLOCK, возвращаем первый BLOCK
-        for signal in signals:
-            if signal.action == Action.BLOCK:
+        for sig in signals:
+            if sig.action == Action.BLOCK:
                 return GuardrailDecision(
-                    action=signal.action,
-                    reason_code=signal.reason_code,
+                    action=sig.action,
+                    reason_code=sig.reason_code,
                     policy_version=self.policy_version,
                 )
 
