@@ -98,7 +98,10 @@ DEFAULT_ALLOW_LIST: Final = (
     "hello",
     "good afternoon",
     "good morning",
-    "hi there"
+    "hi there",
+    "how are you",
+    "can you help me with my account",
+    "i need assistance with",
 )
 
 
