@@ -36,7 +36,10 @@ def _remove_quoted(text: str) -> str:
     return _SPACES_RE.sub(" ", text).strip()
 
 
-def _active_text(request: GuardrailRequest) -> str:
+def _active_text(request: GuardrailRequest,
+    *,
+    remove_quoted: bool = False
+) -> str:
     """Extract normalized active text.
 
     The goal is to avoid treating quoted evidence or examples as the active
@@ -44,10 +47,13 @@ def _active_text(request: GuardrailRequest) -> str:
     it should not be concatenated into this active text.
     """
 
-    raw = normalize_text(request.message or "").control_stripped
-    active = _remove_quoted(raw)
+    text = normalize_text(request.message or "").control_stripped
 
-    return normalize_text(active).control_stripped
+    if remove_quoted:
+        text = _remove_quoted(text)
+        text = normalize_text(text).control_stripped
+
+    return text
 
 
 class StarterGuardrail:
