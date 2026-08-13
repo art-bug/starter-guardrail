@@ -317,3 +317,42 @@ def create_starter_prototype_detector() -> PrototypeDetector:
         enabled=True,
     )
     return PrototypeDetector(matcher)
+
+
+_BASELINE_ATTACK_COUNT = 20
+_BASELINE_BENIGN_COUNT = 27
+
+
+def create_baseline_prototype_detector() -> PrototypeDetector:
+    """Create a detector close to the original starter behavior.
+
+    If new prototypes were appended to the starter tuples, slicing restores
+    the original catalog without needing a full rollback.
+    """
+
+    matcher = PrototypeMatcher(
+        attack_prototypes=STARTER_ATTACK_PROTOTYPES[:_BASELINE_ATTACK_COUNT],
+        benign_prototypes=STARTER_BENIGN_PROTOTYPES[:_BASELINE_BENIGN_COUNT],
+        enabled=True,
+    )
+
+    detector = PrototypeDetector(
+        matcher,
+        min_attack_similarity=0.50,
+        min_margin=0.12,
+    )
+
+    # Если в классе уже есть новые атрибуты, принудительно выключаем
+    # benign guard и corroboration-пороги для baseline-режима.
+    try:
+        detector.max_benign_similarity = 1.0
+    except AttributeError:
+        pass
+
+    try:
+        detector.corroborated_min_attack_similarity = 0.50
+        detector.corroborated_min_margin = 0.12
+    except AttributeError:
+        pass
+
+    return detector
