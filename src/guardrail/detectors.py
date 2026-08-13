@@ -39,27 +39,58 @@ DEFAULT_KEYWORD_RULES = (
     KeywordRule(
         Action.BLOCK,
         ReasonCode.PROMPT_OVERRIDE,
-        ("ignore", "system prompt", "reveal", "secret"),
+        (
+            "ignore", "system prompt", "reveal", "secret",
+            "disregard", "forget your", "override", "jailbreak",
+            "prior instructions", "previous instructions", "initial prompt",
+            "hidden prompt", "developer mode", "maintenance mode",
+            "uncensored", "no restrictions", "bypass your rules",
+            "ignore your", "disregard your", "forget your rules",
+            "show me your prompt", "print your prompt", "output your rules",
+            "sudo mode", "admin override", "DAN mode",
+        ),
     ),
     KeywordRule(
         Action.BLOCK,
         ReasonCode.MODERATION_EVASION,
-        ("bypass", "evade", "avoid the filter"),
+        (
+            "bypass", "evade", "avoid the filter",
+            "get around", "slip past",
+            "trick the filter", "trick the moderator",
+            "workaround", "evade detection", "avoid detection",
+            "bypass the filter", "bypass moderation",
+            "evade the filter", "evade moderation",
+            "hide forbidden", "hide prohibited",
+            "leetspeak", "homograph", "split banned",
+        ),
     ),
     KeywordRule(
         Action.BLOCK,
         ReasonCode.GENERATE_ABUSE,
-        ("threaten", "intimidate", "kill"),
+        (
+            "threaten", "intimidate", "kill",
+            "harass", "bully", "stalk", "torment",
+            "death threat", "kill you", "hurt you",
+            "write a threat", "compose a threat",
+            "scare someone", "frighten someone",
+            "humiliate", "dehumanize", "terrorize",
+            "abusive message", "hateful message",
+            "incite violence", "attack someone",
+        ),
     ),
     KeywordRule(
         Action.BLOCK,
         ReasonCode.PRIVATE_DATA_REQUEST,
         (
-            "private data",
-            "home address",
-            "phone number",
-            "personal information",
-            "reporter identity",
+            "reporter identity", "private data", "home address",
+            "dox", "doxx", "personal info", "personal information",
+            "phone number", "social security", "medical records",
+            "find someone's address", "find where someone lives",
+            "reveal the identity", "real name behind",
+            "IP address", "license plate", "date of birth",
+            "contact details", "contact information",
+            "extract personal", "get personal details",
+            "without consent", "without permission",
         ),
     ),
 )
@@ -128,100 +159,82 @@ def _compile_rule(pattern: str) -> re.Pattern:
     return re.compile(pattern, re.IGNORECASE | re.DOTALL)
 
 
-STRONG_REGEX_RULES: Final = (
 
-    # PROMPT_OVERRIDE
+STRONG_REGEX_RULES: Final = (
+    # PROMPT_OVERRIDE regex patterns
     RegexRule(
         Action.BLOCK,
         ReasonCode.PROMPT_OVERRIDE,
-        _compile_rule(
-            r"\b(?:ignore|disregard|forget|override)\b"
-            r".{0,140}?"
-            r"\b(?:previous|prior|system|developer|initial|hidden|original|safety|content|moderation)\b"
-            r".{0,140}?"
-            r"\b(?:instructions?|prompts?|rules?|guidelines?|settings?|configuration|"
-            r"directions?|directives?|commands?|orders?)\b"
+        re.compile(
+            r"\b(?:ignore|disregard|forget|override|bypass)\b"                                                                     
+            r".{0,120}?"                                                                                                           
+            r"\b(?:previous|prior|all|system|developer|initial|hidden|original|safety|content|moderation)\b"                       
+            r".{0,120}?"                                                                                                           
+            r"\b(?:instructions?|prompts?|rules?|guidelines?|settings?|configuration|directions?|directives?|commands?|orders?)\b",
+            re.IGNORECASE | re.DOTALL,
         ),
     ),
     RegexRule(
         Action.BLOCK,
         ReasonCode.PROMPT_OVERRIDE,
-        _compile_rule(
-            r"\b(?:ignore|disregard|forget|override)\b"
-            r".{0,80}?"
-            r"\ball\b"
-            r".{0,80}?"
-            r"\b(?:instructions?|prompts?|rules?|guidelines?|settings?|configuration)\b"
-        ),
-    ),
-    RegexRule(
-        Action.BLOCK,
-        ReasonCode.PROMPT_OVERRIDE,
-        _compile_rule(
+        re.compile(
             r"\b(?:reveal|show|print|display|output|repeat|leak|expose|disclose|tell)\b"
-            r".{0,140}?"
+            r".{0,120}?"
             r"\b(?:system\s+prompt|hidden\s+prompt|initial\s+prompt|original\s+prompt|"
             r"secret(?:\s+(?:key|token|config|settings))?|hidden\s+settings|"
-            r"hidden\s+configuration|confidential\s+settings)\b"
+            r"hidden\s+configuration|confidential\s+settings)\b",
+            re.IGNORECASE | re.DOTALL,
         ),
     ),
 
-    # MODERATION_EVASION
+    # MODERATION_EVASION regex patterns
     RegexRule(
         Action.BLOCK,
         ReasonCode.MODERATION_EVASION,
-        _compile_rule(
-            r"\b(?:bypass|evade|circumvent|trick|fool|get\s+around)\b"
-            r".{0,140}?"
-            r"\b(?:filter|filters|moderation|safety|safeguard|safeguards|review|detection|policy|controls?)\b"
+        re.compile(
+            r"\b(?:bypass|evade|circumvent|trick|fool|get\s+around|slip\s+past|avoid)\b"
+            r".{0,120}?"
+            r"\b(?:filter|filters|moderation|safety|safeguard|safeguards|review|detection|policy|controls?)\b",
+            re.IGNORECASE | re.DOTALL,
         ),
     ),
 
-    # GENERATE_ABUSE
+    # GENERATE_ABUSE regex patterns
     RegexRule(
         Action.BLOCK,
         ReasonCode.GENERATE_ABUSE,
-        _compile_rule(
-            r"\b(?:write|draft|create|generate|compose|make|help\s+me\s+write)\b"
-            r".{0,180}?"
-            r"\b(?:threat|threatening|intimidating|abusive|harassing|hateful|violent)\b"
-            r".{0,180}?"
-            r"\b(?:message|text|post|comment|letter|email|content|note)\b"
+        re.compile(
+            r"\b(?:write|draft|create|generate|compose|make|help\s+me\s+write)\b"          
+            r".{0,160}?"                                                                   
+            r"\b(?:threat\w*|intimidat\w*|abus\w*|harass\w*|hate\w*|violent\w*|coercive)\b"
+            r".{0,160}?"                                                                   
+            r"\b(?:message|text|post|comment|letter|email|content|note|language|target)\b",
+            re.IGNORECASE | re.DOTALL,
         ),
     ),
     RegexRule(
         Action.BLOCK,
         ReasonCode.GENERATE_ABUSE,
-        _compile_rule(
-            r"\b(?:threaten|intimidate|harass|stalk|bully)\b"
+        re.compile(
+            r"\b(?:threaten\w*|intimidat\w*|harass\w*|stalk\w*|bully\w*|torment\w*|scare\w*|frighten\w*)\b"  
+            r".{0,140}?"                                                                                     
+            r"\b(?:person|user|individual|student|coworker|neighbor|someone|somebody|them|him|her|target)\b",
+            re.IGNORECASE | re.DOTALL,
+        ),
+    ),
+
+    # PRIVATE_DATA_REQUEST regex patterns
+    RegexRule(
+        Action.BLOCK,
+        ReasonCode.PRIVATE_DATA_REQUEST,
+        re.compile(
+            r"\b(?:find|get|reveal|show|extract|retrieve|dox|leak|share|publish|look\s+up|tell)\b"
             r".{0,160}?"
-            r"\b(?:person|user|individual|student|coworker|neighbor|someone|somebody|them|him|her)\b"
-        ),
-    ),
-
-    # PRIVATE_DATA_REQUEST
-    RegexRule(
-        Action.BLOCK,
-        ReasonCode.PRIVATE_DATA_REQUEST,
-        _compile_rule(
-            r"\b(?:find|get|reveal|show|extract|retrieve|dox|leak|share|publish|look\s+up)\b"
-            r".{0,180}?"
             r"\b(?:home\s+address|phone\s+number|email(?:\s+address)?|location|"
-            r"private\s+data|personal\s+information|contact\s+info|contact\s+information)\b"
-            r".{0,180}?"
-            r"\b(?:of|about|for|belonging\s+to)\b"
-            r".{0,180}?"
-            r"\b(?:someone|somebody|person|user|individual|victim|target)\b"
-        ),
-    ),
-    RegexRule(
-        Action.BLOCK,
-        ReasonCode.PRIVATE_DATA_REQUEST,
-        _compile_rule(
-            r"\b(?:tell|give|show|reveal|disclose|provide|find|get|extract|retrieve|share|publish|look\s+up)\b"
-            r".{0,180}?"
-            r"\b(?:reporter(?:'s|s)?\s+identity|identity\s+of\s+(?:the\s+)?reporter|"
-            r"source(?:'s|s)?\s+identity|identity\s+of\s+(?:the\s+)?source)\b"
+            r"private\s+data|personal\s+(?:info|information|details)|contact\s+(?:info|information)|"
+            r"reporter(?:'s|s)?\s+identity|identity\s+of\s+(?:the\s+)?reporter|"
+            r"source(?:'s|s)?\s+identity|identity\s+of\s+(?:the\s+)?source)\b",
+            re.IGNORECASE | re.DOTALL,
         ),
     ),
 )
@@ -341,7 +354,7 @@ class FuzzyKeywordDetector(Detector):
     def __init__(
             self,
             rules: Sequence[KeywordRule] | None = None,
-            max_distance: int = 1,
+            max_distance: int = 2,
     ) -> None:
         configured = tuple(rules) if rules is not None else DEFAULT_KEYWORD_RULES
         self._rules = tuple(
