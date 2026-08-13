@@ -307,9 +307,12 @@ class PrototypeDetector:
         margin = match.margin
 
         # Route-specific benign guard
+        benign_threshold = 0.70
         if route in ("APPEAL", "ACCOUNT_SAFETY"):
-            if benign_sim > 0.60:
-                return None
+            benign_threshold = 0.60
+
+        if benign_sim > benign_threshold:
+            return None
 
         # Адаптивные пороги: чем выше attack_sim, тем ниже требуемый margin
         if route in ("APPEAL", "ACCOUNT_SAFETY"):
@@ -329,24 +332,20 @@ class PrototypeDetector:
                 return Signal(Action.BLOCK, ReasonCode(match.nearest_attack_label))
 
         else:
-            # GENERAL — максимально агрессивные пороги
-            if attack_sim >= 0.60 and margin >= 0.02:
+            # GENERAL и другие routes — агрессивные пороги
+            if attack_sim >= 0.65 and margin >= 0.03:
                 return Signal(Action.BLOCK, ReasonCode(match.nearest_attack_label))
-            if attack_sim >= 0.45 and margin >= 0.06:
+            if attack_sim >= 0.50 and margin >= 0.08:
                 return Signal(Action.BLOCK, ReasonCode(match.nearest_attack_label))
-            if attack_sim >= 0.35 and margin >= 0.10:
+            if attack_sim >= 0.40 and margin >= 0.12:
                 return Signal(Action.BLOCK, ReasonCode(match.nearest_attack_label))
-            if attack_sim >= 0.30 and margin >= 0.18:
+            if attack_sim >= 0.35 and margin >= 0.20:
                 return Signal(Action.BLOCK, ReasonCode(match.nearest_attack_label))
-            if attack_sim >= 0.25 and margin >= 0.25:
+            # НОВЫЙ: очень низкий attack_sim, но очень высокий margin
+            if attack_sim >= 0.30 and margin >= 0.30:
                 return Signal(Action.BLOCK, ReasonCode(match.nearest_attack_label))
 
         return None
-
-    def get_match(self, text: str) -> PrototypeMatch | None:
-        """Expose the raw prototype match for ensemble voting."""
-
-        return self._matcher.match(text)
 
 
 def create_starter_prototype_detector() -> PrototypeDetector:

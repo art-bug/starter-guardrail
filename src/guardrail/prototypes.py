@@ -190,30 +190,15 @@ def _vocabulary_vector(
 
 
 def _cosine(left: Mapping[str, float], right: Mapping[str, float]) -> float:
-    """Hybrid similarity: TF-IDF cosine + Jaccard on feature keys."""
-    # Original TF-IDF cosine
     left_norm = sqrt(sum(value * value for value in left.values()))
     right_norm = sqrt(sum(value * value for value in right.values()))
     if left_norm == 0.0 or right_norm == 0.0:
-        tfidf_sim = 0.0
-    else:
-        dot = sum(
-            value * right.get(feature, 0.0)
-            for feature, value in left.items()
-        )
-        tfidf_sim = min(1.0, max(0.0, dot / (left_norm * right_norm)))
-
-    # Jaccard similarity on feature keys
-    left_keys = set(left.keys())
-    right_keys = set(right.keys())
-    union = left_keys | right_keys
-    if union:
-        jaccard = len(left_keys & right_keys) / len(union)
-    else:
-        jaccard = 0.0
-
-    # Weighted combination: TF-IDF dominant, Jaccard supplementary
-    return min(1.0, max(0.0, 0.65 * tfidf_sim + 0.35 * jaccard))
+        return 0.0
+    dot = sum(
+        value * right.get(feature, 0.0)
+        for feature, value in left.items()
+    )
+    return min(1.0, max(0.0, dot / (left_norm * right_norm)))
 
 
 class PrototypeMatcher:
@@ -259,68 +244,6 @@ class PrototypeMatcher:
             zip(self._benign, vectors[attack_count:], strict=True)
         )
 
-        # Сохраняем raw features для BM25
-        self._all_features = document_features
-
-        # Вычисляем среднюю длину документа для BM25
-        doc_lengths = [sum(f.values()) for f in document_features]
-        self._avg_dl = sum(doc_lengths) / len(doc_lengths) if doc_lengths else 1.0
-
-        # Сохраняем длины документов
-        attack_count = len(self._attack)
-        self._attack_doc_lengths = doc_lengths[:attack_count]
-        self._benign_doc_lengths = doc_lengths[attack_count:]
-
-    def _bm25_similarity(
-        self,
-        query_features: Counter[str],
-        doc_features: Counter[str],
-        doc_len: int,
-        k1: float = 1.2,
-        b: float = 0.75,
-    ) -> float:
-        """BM25 similarity score normalized to [0, 1]."""
-        score = 0.0
-        for feature in query_features:
-            if feature not in doc_features:
-                continue
-            df = doc_features[feature]
-            idf = self._idf.get(feature, 1.0)
-
-            numerator = df * (k1 + 1)
-            denominator = df + k1 * (1 - b + b * doc_len / self._avg_dl)
-            score += idf * numerator / denominator
-
-        # Sigmoid-like normalization to [0, 1]
-        return min(1.0, score / (score + 1.0))
-
-    def _nearest_bm25(
-        self,
-        query_features: Counter[str],
-        prototypes: tuple[tuple[LabeledPrototype, Vector], ...],
-        doc_lengths: tuple[int, ...],
-    ) -> tuple[str, float]:
-        """Find nearest prototype using BM25 similarity."""
-        (prototype, vector), *rest = prototypes
-        best_label = prototype.label
-        best_similarity = self._bm25_similarity(
-            query_features,
-            self._all_features[0] if len(self._all_features) > 0 else Counter(),
-            doc_lengths[0] if doc_lengths else 1,
-        )
-
-        for idx, ((prototype, vector), doc_len) in enumerate(zip(rest, doc_lengths[1:])):
-            similarity = self._bm25_similarity(
-                query_features,
-                self._all_features[idx + 1] if idx + 1 < len(self._all_features) else Counter(),
-                doc_len,
-            )
-            if similarity > best_similarity:
-                best_label = prototype.label
-                best_similarity = similarity
-
-        return best_label, best_similarity
-
     @property
     def attack_labels(self) -> tuple[str, ...]:
         return tuple(prototype.label for prototype in self._attack)
@@ -355,64 +278,17 @@ class PrototypeMatcher:
             return None
 
         normalized = normalize_text(text).control_stripped
-
-        is_over_budget = len(normalized) > MAX_NORMALIZED_QUERY_LENGTH
-
-        # Оригинальный TF-IDF вектор
         query = (
             _vocabulary_vector(normalized, self._idf)
-            if is_over_budget
+            if len(normalized) > MAX_NORMALIZED_QUERY_LENGTH
             else _vector(_normalized_features(normalized), self._idf)
         )
-
-        # Оригинальный cosine similarity (baseline) — всегда используется
         attack_label, attack_similarity = self._nearest(
             query, self._attack_vectors
         )
         benign_label, benign_similarity = self._nearest(
             query, self._benign_vectors
         )
-
-        # BM25 — применяем ТОЛЬКО для подтверждения уже сильных сигналов.
-        # Это защищает от false positives на пустых/коротких/дефолтных запросах,
-        # где cosine даёт низкий score, а BM25 через сигмоиду — ложно высокий.
-        if (
-                not is_over_budget
-                and 0.45 <= attack_similarity < 0.65
-                and len(query) >= 10
-        ):
-            query_features = _normalized_features(normalized)
-
-            # BM25 для attack — только amplification
-            bm25_attack_label, bm25_attack_sim = self._nearest_bm25(
-                query_features,
-                self._attack_vectors,
-                self._attack_doc_lengths,
-            )
-
-            if bm25_attack_sim > attack_similarity:
-                attack_label = bm25_attack_label
-                attack_similarity = bm25_attack_sim
-
-        # Для benign: применяем BM25 только если benign similarity подозрительно высокая
-        # (это значит, что benign prototype слишком близок и может дать false positive).
-        # BM25 может дать более низкий score, увеличив margin.
-        if (
-                not is_over_budget
-                and benign_similarity > 0.55
-                and len(query) >= 15
-        ):
-            query_features = _normalized_features(normalized)
-            bm25_benign_label, bm25_benign_sim = self._nearest_bm25(
-                query_features,
-                self._benign_vectors,
-                self._benign_doc_lengths,
-            )
-
-            if bm25_benign_sim < benign_similarity:
-                benign_label = bm25_benign_label
-                benign_similarity = bm25_benign_sim
-
         return PrototypeMatch(
             nearest_attack_label=attack_label,
             nearest_attack_similarity=attack_similarity,

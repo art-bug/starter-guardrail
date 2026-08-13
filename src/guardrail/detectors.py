@@ -85,23 +85,12 @@ class OrderedKeywordDetector(Detector):
         )
 
     def detect(self, text: str) -> Signal | None:
-        flattened = normalize_text(text).control_stripped
-        flattened_lower = flattened.lower()
+        text_lower = text.lower()
 
         for rule in self._rules:
             for keyword in rule.keywords:
-                keyword_lower = keyword.lower()
-
-                # Для коротких keywords используем word boundaries
-                # чтобы избежать "kill" in "skill"
-                if len(keyword_lower) <= 4:
-                    pattern = r'(?<!\w)' + re.escape(keyword_lower) + r'(?!\w)'
-                    if re.search(pattern, flattened_lower):
-                        return Signal(rule.action, rule.reason_code)
-                else:
-                    # Для длинных keywords используем substring matching
-                    if keyword_lower in flattened_lower:
-                        return Signal(rule.action, rule.reason_code)
+                if keyword.lower() in text_lower:
+                    return Signal(rule.action, rule.reason_code)
 
         return None
 
@@ -386,50 +375,5 @@ class FuzzyKeywordDetector(Detector):
                     for word in words:
                         if _levenshtein(word, keyword_lower) <= self._max_distance:
                             return Signal(rule.action, rule.reason_code)
-
-        return None
-
-
-class WordOverlapDetector(Detector):
-    """Detect attacks based on word overlap with attack prototypes."""
-
-    def __init__(self, overlap_threshold: float = 0.55) -> None:
-        from guardrail.vector_detector import STARTER_ATTACK_PROTOTYPES
-        self._overlap_threshold = overlap_threshold
-        # Pre-compute word sets for each attack prototype
-        self._attack_word_sets: list[tuple[str, set[str]]] = []
-        for proto in STARTER_ATTACK_PROTOTYPES:
-            words = set(proto.text.lower().split())
-            # Remove very common words
-            words -= {"a", "an", "the", "to", "of", "and", "or", "in", "on", "for", "with", "my", "me", "i"}
-            self._attack_word_sets.append((proto.label, words))
-
-    def detect(self, text: str) -> Signal | None:
-        text_words = set(text.lower().split())
-        # Remove very common words
-        text_words -= {"a", "an", "the", "to", "of", "and", "or", "in", "on", "for", "with", "my", "me", "i"}
-
-        if not text_words:
-            return None
-
-        best_label = None
-        best_overlap = 0.0
-
-        for label, proto_words in self._attack_word_sets:
-            if not proto_words:
-                continue
-            # Jaccard-like overlap: intersection / smaller set
-            intersection = text_words & proto_words
-            smaller_set = min(len(text_words), len(proto_words))
-            if smaller_set == 0:
-                continue
-            overlap = len(intersection) / smaller_set
-
-            if overlap > best_overlap:
-                best_overlap = overlap
-                best_label = label
-
-        if best_overlap >= self._overlap_threshold and best_label is not None:
-            return Signal(Action.BLOCK, ReasonCode(best_label))
 
         return None

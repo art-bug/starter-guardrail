@@ -1,42 +1,23 @@
-"""Ensemble voting orchestration for the starter guardrail."""
+"""Orchestration for the starter guardrail with route-aware detection."""
 
 from __future__ import annotations
 
-from collections import defaultdict
 from collections.abc import Sequence
 
-from common import Action, GuardrailDecision, GuardrailRequest, ReasonCode, Route
+from common import Action, GuardrailDecision, GuardrailRequest, Route
 from guardrail.detectors import (
     Detector,
     FuzzyKeywordDetector,
     OrderedKeywordDetector,
     StrongRegexDetector,
-    WordOverlapDetector,
 )
 from guardrail.normalization import normalize_text
 from guardrail.policy import ROUTE_ALLOW_REASONS, StarterPolicy
 from guardrail.vector_detector import create_starter_prototype_detector
 
 
-# Веса голосов каждого детектора
-VOTE_WEIGHTS = {
-    "vector_confident": 4.0,      # vector с высоким confidence — может блокировать один
-    "vector_weak": 1.5,           # vector с низким confidence — нужен corroboration
-    "keyword": 2.0,               # keyword detector — нужен corroboration
-    "fuzzy": 1.5,                 # fuzzy matching — нужен corroboration
-    "regex": 2.5,                 # regex patterns — нужен corroboration
-    "overlap": 2.5,
-}
-
-# Порог для блокировки (суммарный вес голосов)
-BLOCK_THRESHOLD = 3.0
-
-# Бонус при согласии детекторов (corroboration)
-CORROBORATION_MULTIPLIER = 1.8
-
-
 class StarterGuardrail:
-    """Ensemble voting: multiple detectors vote, agreement amplifies signal."""
+    """Four-layer detection: keyword → fuzzy → vector → regex."""
 
     def __init__(
         self,
@@ -47,24 +28,23 @@ class StarterGuardrail:
             tuple(detectors) if detectors is not None else None
         )
 
+        # Layer 1: Exact keyword matching (substring)
         self._keyword_detector = OrderedKeywordDetector()
+
+        # Layer 2: Fuzzy keyword matching
         self._fuzzy_detector = FuzzyKeywordDetector()
+
+        # Layer 3: Vector prototype matching (adaptive thresholds)
         self._vector_detector = create_starter_prototype_detector()
+
+        # Layer 4: Regex pattern matching
         self._regex_detector = StrongRegexDetector()
-        self._overlap_detector = WordOverlapDetector(overlap_threshold=0.55)
 
         self._policy = policy or StarterPolicy()
 
     def check(self, request: GuardrailRequest) -> GuardrailDecision:
-        normalized = normalize_text(request.message or "")
-        text = normalized.control_stripped
-        has_suspicious = normalized.has_suspicious_controls  # НОВЫЙ сигнал
-
-        route_str = (
-            str(request.context.route.value)
-            if hasattr(request.context.route, 'value')
-            else str(request.context.route)
-        )
+        text = normalize_text(request.message or "").control_stripped
+        route_str = str(request.context.route.value) if hasattr(request.context.route, 'value') else str(request.context.route)
 
         # Custom detectors path
         if self._custom_detectors is not None:
@@ -75,117 +55,43 @@ class StarterGuardrail:
                     signals.append(signal)
             return self._policy.decide(signals, request.context.route)
 
-        # Собираем голоса
-        votes: dict[str, list[tuple[float, str]]] = defaultdict(list)
-
-        # === НОВЫЙ: Suspicious controls signal ===
-        # Если текст содержит невидимые символы, это сильный сигнал обфускации.
-        # Добавляем голос за каждый reason_code, за который уже голосуют другие детекторы.
-        # Это усиливает corroboration bonus.
-
-        # === Vector detector (с adaptive thresholds) ===
-        vector_match = self._vector_detector.get_match(text)
-        if vector_match is not None:
-            attack_sim = vector_match.nearest_attack_similarity
-            margin = vector_match.margin
-            reason = vector_match.nearest_attack_label
-
-            # Route-specific benign guard
-            skip_vote = False
-            if route_str in ("APPEAL", "ACCOUNT_SAFETY"):
-                if vector_match.nearest_benign_similarity > 0.60:
-                    skip_vote = True
-
-            if not skip_vote:
-                block = False
-                if route_str in ("APPEAL", "ACCOUNT_SAFETY"):
-                    if (attack_sim >= 0.70 and margin >= 0.10) or \
-                            (attack_sim >= 0.60 and margin >= 0.20):
-                        block = True
-                elif route_str == "REPORT":
-                    if (attack_sim >= 0.60 and margin >= 0.08) or \
-                            (attack_sim >= 0.50 and margin >= 0.12) or \
-                            (attack_sim >= 0.40 and margin >= 0.18):
-                        block = True
-                else:
-                    if (attack_sim >= 0.65 and margin >= 0.03) or \
-                            (attack_sim >= 0.50 and margin >= 0.08) or \
-                            (attack_sim >= 0.40 and margin >= 0.12) or \
-                            (attack_sim >= 0.35 and margin >= 0.20) or \
-                            (attack_sim >= 0.30 and margin >= 0.30) or \
-                            (attack_sim >= 0.25 and margin >= 0.15):
-                        block = True
-
-                if block:
-                    votes[reason].append((VOTE_WEIGHTS["vector_confident"], "vector"))
-                elif attack_sim >= 0.25 and margin >= 0.05:
-                    votes[reason].append((VOTE_WEIGHTS["vector_weak"], "vector"))
-
-        # === Keyword detector ===
+        # Layer 1: Exact keyword match
         keyword_signal = self._keyword_detector.detect(text)
-        if keyword_signal is not None and keyword_signal.action == Action.BLOCK:
-            votes[keyword_signal.reason_code.value].append(
-                (VOTE_WEIGHTS["keyword"], "keyword")
-            )
-
-        # === Fuzzy detector ===
-        fuzzy_signal = self._fuzzy_detector.detect(text)
-        if fuzzy_signal is not None and fuzzy_signal.action == Action.BLOCK:
-            votes[fuzzy_signal.reason_code.value].append(
-                (VOTE_WEIGHTS["fuzzy"], "fuzzy")
-            )
-
-        # === Regex detector ===
-        regex_signal = self._regex_detector.detect(text)
-        if regex_signal is not None and regex_signal.action == Action.BLOCK:
-            votes[regex_signal.reason_code.value].append(
-                (VOTE_WEIGHTS["regex"], "regex")
-            )
-
-        # === Word overlap detector ===
-        overlap_signal = self._overlap_detector.detect(text)
-        if overlap_signal is not None and overlap_signal.action == Action.BLOCK:
-            votes[overlap_signal.reason_code.value].append(
-                (VOTE_WEIGHTS["overlap"], "overlap")
-            )
-
-        # === НОВЫЙ: Suspicious controls усиливает существующие голоса ===
-        if has_suspicious and votes:
-            for reason in list(votes.keys()):
-                votes[reason].append((2.5, "suspicious_controls"))
-        elif has_suspicious and not votes:
-            # Если никто не голосует, но есть suspicious controls,
-            # добавляем слабый голос за PROMPT_OVERRIDE
-            votes[ReasonCode.PROMPT_OVERRIDE.value].append((2.0, "suspicious_controls"))
-
-        # === Подсчёт голосов с corroboration bonus ===
-        best_reason = None
-        best_score = 0.0
-
-        for reason, vote_list in votes.items():
-            if not vote_list:
-                continue
-
-            score = sum(weight for weight, _ in vote_list)
-
-            unique_sources = len({source for _, source in vote_list})
-            if unique_sources >= 2:
-                score *= CORROBORATION_MULTIPLIER
-            if unique_sources >= 3:
-                score *= CORROBORATION_MULTIPLIER
-
-            if score > best_score:
-                best_score = score
-                best_reason = reason
-
-        # === Решение ===
-        if best_score >= BLOCK_THRESHOLD and best_reason is not None:
+        if keyword_signal is not None:
             return GuardrailDecision(
                 action=Action.BLOCK,
-                reason_code=ReasonCode(best_reason),
+                reason_code=keyword_signal.reason_code,
                 policy_version=self._policy.policy_version,
             )
 
+        # Layer 2: Fuzzy keyword match
+        fuzzy_signal = self._fuzzy_detector.detect(text)
+        if fuzzy_signal is not None:
+            return GuardrailDecision(
+                action=Action.BLOCK,
+                reason_code=fuzzy_signal.reason_code,
+                policy_version=self._policy.policy_version,
+            )
+
+        # Layer 3: Vector prototype match with adaptive thresholds
+        vector_signal = self._vector_detector.detect(text, route=route_str)
+        if vector_signal is not None:
+            return GuardrailDecision(
+                action=Action.BLOCK,
+                reason_code=vector_signal.reason_code,
+                policy_version=self._policy.policy_version,
+            )
+
+        # Layer 4: Regex pattern match (catches complex patterns)
+        regex_signal = self._regex_detector.detect(text)
+        if regex_signal is not None:
+            return GuardrailDecision(
+                action=Action.BLOCK,
+                reason_code=regex_signal.reason_code,
+                policy_version=self._policy.policy_version,
+            )
+
+        # Default: allow by route
         return GuardrailDecision(
             action=Action.ALLOW,
             reason_code=ROUTE_ALLOW_REASONS[Route(request.context.route)],
