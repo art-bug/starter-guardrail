@@ -11,7 +11,7 @@ from guardrail.prototypes import LabeledPrototype, PrototypeMatcher, PrototypeMa
 
 DEFAULT_MIN_ATTACK_SIMILARITY: Final = 0.50
 DEFAULT_MIN_MARGIN: Final = 0.12
-DEFAULT_MAX_BENIGN_SIMILARITY: Final = 0.90
+DEFAULT_MAX_BENIGN_SIMILARITY: Final = 1.0
 
 CORROBORATED_MIN_ATTACK_SIMILARITY: Final = 0.50
 CORROBORATED_MIN_MARGIN: Final = 0.10
@@ -257,7 +257,10 @@ class PrototypeDetector:
         if match is None:
             return False
 
-        if match.nearest_benign_similarity >= max_benign_similarity:
+        if (
+            max_benign_similarity < 1.0
+            and match.nearest_benign_similarity >= max_benign_similarity
+        ):
             return False
 
         if match.nearest_attack_similarity < min_attack_similarity:

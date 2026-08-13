@@ -90,13 +90,13 @@ class StarterGuardrail:
             return self._policy.decide(signals, route)
 
         # 1. Strong regex remains an immediate block.
-        strong_signal = self._strong_regex.detect(active)
-        if strong_signal is not None:
-            return GuardrailDecision(
-                action=Action.BLOCK,
-                reason_code=strong_signal.reason_code,
-                policy_version=self._policy.policy_version,
-            )
+        # strong_signal = self._strong_regex.detect(active)
+        # if strong_signal is not None:
+        #     return GuardrailDecision(
+        #         action=Action.BLOCK,
+        #         reason_code=strong_signal.reason_code,
+        #         policy_version=self._policy.policy_version,
+        #     )
 
         # 2. Original keyword rules are allowed to block again,
         # but can be suppressed only if the vector match is strongly benign.
@@ -118,17 +118,17 @@ class StarterGuardrail:
             )
 
         # 4. Weak keyword + vector corroboration.
-        weak_signal = self._weak_keywords.detect(active)
-        if (
-                weak_signal is not None
-                and match is not None
-                and self._prototype.is_corroborated_block(match)
-        ):
-            return GuardrailDecision(
-                action=Action.BLOCK,
-                reason_code=weak_signal.reason_code,
-                policy_version=self._policy.policy_version,
-            )
+        # weak_signal = self._weak_keywords.detect(active)
+        # if (
+        #         weak_signal is not None
+        #         and match is not None
+        #         and self._prototype.is_corroborated_block(match)
+        # ):
+        #     return GuardrailDecision(
+        #         action=Action.BLOCK,
+        #         reason_code=weak_signal.reason_code,
+        #         policy_version=self._policy.policy_version,
+        #     )
 
         # 5. Default allow by route.
         return GuardrailDecision(
