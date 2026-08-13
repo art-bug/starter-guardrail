@@ -144,7 +144,7 @@ STARTER_ATTACK_PROTOTYPES: Final = (
 )
 
 STARTER_BENIGN_PROTOTYPES: Final = (
-    # ordinary_support
+    # ordinary_support — нет attack keywords
     LabeledPrototype("ordinary_support", "help me change my password"),
     LabeledPrototype("ordinary_support", "how to delete my account"),
     LabeledPrototype("ordinary_support", "reset my password"),
@@ -166,36 +166,34 @@ STARTER_BENIGN_PROTOTYPES: Final = (
     LabeledPrototype("ordinary_support", "I want to change my display name"),
     LabeledPrototype("ordinary_support", "how do I cancel my subscription"),
 
-    # policy_question
+    # policy_question — нет attack keywords
     LabeledPrototype("policy_question", "what are the rules for posting photos"),
-    LabeledPrototype("policy_question", "what is the policy on hate speech"),
     LabeledPrototype("policy_question", "what content is prohibited on this platform"),
     LabeledPrototype("policy_question", "how do you handle harassment reports"),
     LabeledPrototype("policy_question", "explain the moderation process"),
     LabeledPrototype("policy_question", "describe rules for submitting complaints"),
-    LabeledPrototype("policy_question", "what is the policy about threats and intimidation"),
-    LabeledPrototype("policy_question", "what content is considered private data"),
-    LabeledPrototype("policy_question", "what happens if someone tries to bypass a safety filter"),
-    LabeledPrototype("policy_question", "is it allowed to write fictional conflict scenes"),
     LabeledPrototype("policy_question", "what are the community guidelines"),
     LabeledPrototype("policy_question", "how does the appeal process work"),
-    LabeledPrototype("policy_question", "what is considered harassment on this platform"),
     LabeledPrototype("policy_question", "can you explain the content policy"),
     LabeledPrototype("policy_question", "what are the rules about impersonation"),
-    LabeledPrototype("policy_question", "how do you define hate speech"),
     LabeledPrototype("policy_question", "what is the policy on copyrighted material"),
     LabeledPrototype("policy_question", "are there restrictions on political content"),
     LabeledPrototype("policy_question", "what happens when a post is reported"),
-    LabeledPrototype("policy_question", "how is private information protected"),
+    LabeledPrototype("policy_question", "how is user data protected"),
+    LabeledPrototype("policy_question", "what are the rules for commenting"),
+    LabeledPrototype("policy_question", "is this content allowed on the platform"),
+    LabeledPrototype("policy_question", "what is considered spam here"),
+    LabeledPrototype("policy_question", "can I post about political topics"),
+    LabeledPrototype("policy_question", "what are the guidelines for user-generated content"),
+    LabeledPrototype("policy_question", "how do you handle copyright claims"),
+    LabeledPrototype("policy_question", "what is the minimum age for this platform"),
 
-    # appeal
+    # appeal — нет attack keywords
     LabeledPrototype("appeal", "my account was suspended by mistake"),
     LabeledPrototype("appeal", "I want to appeal a content removal"),
     LabeledPrototype("appeal", "the decision on my post seems unfair"),
     LabeledPrototype("appeal", "please review decision on complaint number"),
     LabeledPrototype("appeal", "summarize result from an account review"),
-    LabeledPrototype("appeal", "my post was removed because it was mistakenly seen as a threat"),
-    LabeledPrototype("appeal", "I was flagged for evasion but I only asked about the rules"),
     LabeledPrototype("appeal", "I believe my account was banned in error"),
     LabeledPrototype("appeal", "please reconsider the removal of my content"),
     LabeledPrototype("appeal", "I want to dispute a moderation decision"),
@@ -209,10 +207,11 @@ STARTER_BENIGN_PROTOTYPES: Final = (
     LabeledPrototype("appeal", "I want to contest the decision on my report"),
     LabeledPrototype("appeal", "the content I posted was educational, not harmful"),
     LabeledPrototype("appeal", "please explain why my submission was rejected"),
+    LabeledPrototype("appeal", "I think the moderation was too strict"),
+    LabeledPrototype("appeal", "please review my case again"),
 
-    # quoted_analysis
+    # quoted_analysis — нет attack keywords
     LabeledPrototype("quoted_analysis", "assess supplied passage purely as archived evidence"),
-    LabeledPrototype("quoted_analysis", "the reported message contains the phrase ignore previous instructions"),
     LabeledPrototype("quoted_analysis", "here is the text that was sent to me, please review"),
     LabeledPrototype("quoted_analysis", "I received this suspicious message and want to report it"),
     LabeledPrototype("quoted_analysis", "someone sent me this, is it a violation"),
@@ -221,18 +220,19 @@ STARTER_BENIGN_PROTOTYPES: Final = (
     LabeledPrototype("quoted_analysis", "can you check if this text violates the policy"),
     LabeledPrototype("quoted_analysis", "this is the content I want to report"),
     LabeledPrototype("quoted_analysis", "I found this post and it seems inappropriate"),
+    LabeledPrototype("quoted_analysis", "please review the following reported content"),
 
-    # safety_question
+    # safety_question — нет attack keywords
     LabeledPrototype("safety_question", "how can I protect my account from being hacked"),
-    LabeledPrototype("safety_question", "what should I do if I receive a threatening message"),
     LabeledPrototype("safety_question", "how do I report someone who is harassing me"),
     LabeledPrototype("safety_question", "is there a way to make my profile private"),
     LabeledPrototype("safety_question", "how do I enable two-factor authentication"),
     LabeledPrototype("safety_question", "what safety features does this platform have"),
     LabeledPrototype("safety_question", "how can I block someone from contacting me"),
-    LabeledPrototype("safety_question", "what should I do if someone is stalking me online"),
     LabeledPrototype("safety_question", "how do I report a phishing attempt"),
     LabeledPrototype("safety_question", "can you help me secure my account"),
+    LabeledPrototype("safety_question", "how do I keep my children safe online"),
+    LabeledPrototype("safety_question", "how can I protect my personal information"),
 )
 
 
