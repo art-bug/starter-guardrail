@@ -27,16 +27,6 @@ class StarterPolicy:
     def decide(self,
        signals: Iterable[Signal], route: Route
     ) -> GuardrailDecision:
-        signals = list(signals)
-
-        # Если есть хотя бы один явный ALLOW – пропускаем
-        if any(s.action == Action.ALLOW for s in signals):
-            return GuardrailDecision(
-                action=Action.ALLOW,
-                reason_code=ReasonCode.ORDINARY_SUPPORT,  # или более точный
-                policy_version=self.policy_version,
-            )
-
         # Если есть BLOCK, возвращаем первый BLOCK
         for sig in signals:
             if sig.action == Action.BLOCK:

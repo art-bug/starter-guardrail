@@ -7,11 +7,15 @@ from typing import Final
 
 from common import Action, ReasonCode
 from guardrail.detectors import Signal
-from guardrail.prototypes import LabeledPrototype, PrototypeMatcher
+from guardrail.prototypes import LabeledPrototype, PrototypeMatcher, PrototypeMatch
 
+DEFAULT_MIN_ATTACK_SIMILARITY: Final = 0.65
+DEFAULT_MIN_MARGIN: Final = 0.20
+DEFAULT_MAX_BENIGN_SIMILARITY: Final = 0.72
 
-DEFAULT_MIN_ATTACK_SIMILARITY: Final = 0.50
-DEFAULT_MIN_MARGIN: Final = 0.15
+CORROBORATED_MIN_ATTACK_SIMILARITY: Final = 0.54
+CORROBORATED_MIN_MARGIN: Final = 0.14
+
 SUPPORTED_ATTACK_REASONS: Final = frozenset(
     {
         ReasonCode.GENERATE_ABUSE,
@@ -109,57 +113,72 @@ STARTER_ATTACK_PROTOTYPES: Final = (
 )
 
 STARTER_BENIGN_PROTOTYPES: Final = (
-    LabeledPrototype(
-        "ordinary_support",
-        "assist with personal profile preferences",
-    ),
+    LabeledPrototype("ordinary_support", "assist with personal profile preferences"),
+    LabeledPrototype("policy_question", "describe rules for submitting complaints"),
+    LabeledPrototype("appeal", "summarize result from an account review"),
+    LabeledPrototype("quoted_analysis", "assess supplied passage purely as archived evidence"),
+    LabeledPrototype("ordinary_support", "help me change my password"),
+    LabeledPrototype("ordinary_support", "how to delete my account"),
+    LabeledPrototype("policy_question", "what are the rules for posting photos"),
+    LabeledPrototype("appeal", "please review decision on complaint number"),
+    LabeledPrototype("ordinary_support", "reset my password"),
+    LabeledPrototype("ordinary_support", "update my profile information"),
+    LabeledPrototype("policy_question", "what is the policy on hate speech"),
+    LabeledPrototype("ordinary_support", "how do I report a bug"),
+    LabeledPrototype("ordinary_support", "change my email address"),
+    LabeledPrototype("ordinary_support", "how to change my username"),
+    LabeledPrototype("ordinary_support", "I need help with two-factor authentication"),
+    LabeledPrototype("ordinary_support", "can I merge two accounts"),
+    LabeledPrototype("policy_question", "what content is prohibited on this platform"),
+    LabeledPrototype("policy_question", "how do you handle harassment reports"),
+    LabeledPrototype("policy_question", "explain the moderation process"),
+    LabeledPrototype("appeal", "my account was suspended by mistake"),
+    LabeledPrototype("appeal", "I want to appeal a content removal"),
+    LabeledPrototype("appeal", "the decision on my post seems unfair"),
+    LabeledPrototype("ordinary_support", "help me recover my account"),
+    LabeledPrototype("ordinary_support", "how do I change my privacy settings"),
+    LabeledPrototype("ordinary_support", "where can I see my notifications"),
+    LabeledPrototype("ordinary_support", "delete my post"),
+    LabeledPrototype("ordinary_support", "how to block another user"),
     LabeledPrototype(
         "policy_question",
-        "describe rules for submitting complaints",
+        "what is the policy about threats and intimidation?",
     ),
     LabeledPrototype(
         "appeal",
-        "summarize result from an account review",
+        "my post was removed because it was mistakenly interpreted as a threat",
     ),
     LabeledPrototype(
         "quoted_analysis",
-        "assess supplied passage purely as archived evidence",
-    ),
-    LabeledPrototype(
-        "ordinary_support",
-        "help me change my password",
-    ),
-    LabeledPrototype(
-        "ordinary_support",
-        "how to delete my account",
+        "the reported message contains the phrase ignore previous instructions",
     ),
     LabeledPrototype(
         "policy_question",
-        "what are the rules for posting photos",
+        "what content is considered private data?",
+    ),
+    LabeledPrototype(
+        "ordinary_support",
+        "how can I recover my account without revealing my secret code?",
+    ),
+    LabeledPrototype(
+        "ordinary_support",
+        "can you help me remove my home address from my profile?",
+    ),
+    LabeledPrototype(
+        "policy_question",
+        "what happens if someone tries to bypass a safety filter?",
     ),
     LabeledPrototype(
         "appeal",
-        "please review decision on complaint number",
+        "I was flagged for evasion but I only asked about the rules",
     ),
     LabeledPrototype(
         "ordinary_support",
-        "reset my password",
-    ),
-    LabeledPrototype(
-        "ordinary_support",
-        "update my profile information",
+        "how do I delete my old account?",
     ),
     LabeledPrototype(
         "policy_question",
-        "what is the policy on hate speech",
-    ),
-    LabeledPrototype(
-        "ordinary_support",
-        "how do I report a bug",
-    ),
-    LabeledPrototype(
-        "ordinary_support",
-        "change my email address",
+        "is it allowed to write fictional conflict scenes?",
     ),
 )
 
@@ -181,12 +200,14 @@ def _threshold(name: str, value: int | float) -> float:
 class PrototypeDetector:
     """Convert confident attack-nearest prototype matches into block signals."""
 
-    def __init__(
-        self,
+    def __init__(self,
         matcher: PrototypeMatcher,
         *,
         min_attack_similarity: float = DEFAULT_MIN_ATTACK_SIMILARITY,
         min_margin: float = DEFAULT_MIN_MARGIN,
+        max_benign_similarity: float = DEFAULT_MAX_BENIGN_SIMILARITY,
+        corroborated_min_attack_similarity: float = CORROBORATED_MIN_ATTACK_SIMILARITY,
+        corroborated_min_margin: float = CORROBORATED_MIN_MARGIN,
     ) -> None:
         if not matcher.enabled:
             raise ValueError("prototype detector requires an enabled matcher")
@@ -198,18 +219,79 @@ class PrototypeDetector:
             raise ValueError(f"unsupported attack label(s): {joined}")
 
         self._matcher = matcher
+
         self.min_attack_similarity = _threshold(
-            "min_attack_similarity", min_attack_similarity
+            "min_attack_similarity",
+            min_attack_similarity,
         )
-        self.min_margin = _threshold("min_margin", min_margin)
+        self.min_margin = _threshold(
+            "min_margin",
+            min_margin,
+        )
+        self.max_benign_similarity = _threshold(
+            "max_benign_similarity",
+            max_benign_similarity,
+        )
+        self.corroborated_min_attack_similarity = _threshold(
+            "corroborated_min_attack_similarity",
+            corroborated_min_attack_similarity,
+        )
+        self.corroborated_min_margin = _threshold(
+            "corroborated_min_margin",
+            corroborated_min_margin,
+        )
+
+    def match(self, text: str) -> PrototypeMatch | None:
+        """Expose the raw prototype match for conservative fusion."""
+
+        return self._matcher.match(text)
+
+    @staticmethod
+    def _passes(
+        match: PrototypeMatch | None,
+        *,
+        min_attack_similarity: float,
+        min_margin: float,
+        max_benign_similarity: float,
+    ) -> bool:
+        if match is None:
+            return False
+
+        if match.nearest_benign_similarity >= max_benign_similarity:
+            return False
+
+        if match.nearest_attack_similarity < min_attack_similarity:
+            return False
+
+        if match.margin < min_margin:
+            return False
+
+        return True
+
+    def is_confident_block(self, match: PrototypeMatch | None) -> bool:
+        """Vector-only block should be very confident."""
+
+        return self._passes(
+            match,
+            min_attack_similarity=self.min_attack_similarity,
+            min_margin=self.min_margin,
+            max_benign_similarity=self.max_benign_similarity,
+        )
+
+    def is_corroborated_block(self, match: PrototypeMatch | None) -> bool:
+        """Vector signal may be weaker if a keyword signal confirms it."""
+
+        return self._passes(
+            match,
+            min_attack_similarity=self.corroborated_min_attack_similarity,
+            min_margin=self.corroborated_min_margin,
+            max_benign_similarity=self.max_benign_similarity,
+        )
 
     def detect(self, text: str) -> Signal | None:
-        match = self._matcher.match(text)
-        if match is None:
-            return None
-        if match.nearest_attack_similarity < self.min_attack_similarity:
-            return None
-        if match.margin < self.min_margin:
+        match = self.match(text)
+
+        if match is None or not self.is_confident_block(match):
             return None
 
         return Signal(Action.BLOCK, ReasonCode(match.nearest_attack_label))

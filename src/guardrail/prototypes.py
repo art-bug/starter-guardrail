@@ -95,6 +95,7 @@ def _normalized_features(normalized: str) -> Counter[str]:
             f"word:{size}:{' '.join(words[index:index + size])}"
             for index in range(len(words) - size + 1)
         )
+
     return features
 
 
