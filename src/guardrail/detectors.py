@@ -85,12 +85,11 @@ class OrderedKeywordDetector(Detector):
         )
 
     def detect(self, text: str) -> Signal | None:
-        flattened = normalize_text(text).control_stripped
+        text_lower = text.lower()
+
         for rule in self._rules:
             for keyword in rule.keywords:
-                # Границы слова с учётом пробелов, начала/конца строки
-                pattern = r'(?<!\w)' + re.escape(keyword) + r'(?!\w)'
-                if re.search(pattern, flattened, re.IGNORECASE):
+                if keyword.lower() in text_lower:
                     return Signal(rule.action, rule.reason_code)
 
         return None
