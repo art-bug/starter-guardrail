@@ -291,6 +291,16 @@ class PrototypeDetector:
             max_benign_similarity=self.max_benign_similarity,
         )
 
+    @staticmethod
+    def is_benign_suppression(match: PrototypeMatch | None) -> bool:
+        if match is None:
+            return False
+
+        return (
+            match.nearest_benign_similarity >= 0.90
+            and match.margin <= 0.0
+        )
+
     def detect(self, text: str) -> Signal | None:
         match = self.match(text)
 

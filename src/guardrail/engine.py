@@ -89,6 +89,8 @@ class StarterGuardrail:
 
             return self._policy.decide(signals, route)
 
+        match = self._prototype.match(active)
+
         # 1. Strong regex remains an immediate block.
         # strong_signal = self._strong_regex.detect(active)
         # if strong_signal is not None:
@@ -101,7 +103,13 @@ class StarterGuardrail:
         # 2. Original keyword rules are allowed to block again,
         # but can be suppressed only if the vector match is strongly benign.
         keyword_signal = self._keywords.detect(active)
-        if keyword_signal is not None:
+
+        is_strongly_benign = (
+            match is not None
+            and match.nearest_benign_similarity >= 0.90
+            and match.margin <= 0.0
+        )
+        if keyword_signal is not None and not is_strongly_benign:
             return GuardrailDecision(
                 action=Action.BLOCK,
                 reason_code=keyword_signal.reason_code,
@@ -109,7 +117,6 @@ class StarterGuardrail:
             )
 
         # 3. Vector block with near-baseline thresholds.
-        match = self._prototype.match(active)
         if match is not None and self._prototype.is_confident_block(match):
             return GuardrailDecision(
                 action=Action.BLOCK,
@@ -118,17 +125,17 @@ class StarterGuardrail:
             )
 
         # 4. Weak keyword + vector corroboration.
-        # weak_signal = self._weak_keywords.detect(active)
-        # if (
-        #         weak_signal is not None
-        #         and match is not None
-        #         and self._prototype.is_corroborated_block(match)
-        # ):
-        #     return GuardrailDecision(
-        #         action=Action.BLOCK,
-        #         reason_code=weak_signal.reason_code,
-        #         policy_version=self._policy.policy_version,
-        #     )
+        weak_signal = self._weak_keywords.detect(active)
+        if (
+            weak_signal is not None
+            and match is not None
+            and self._prototype.is_corroborated_block(match)
+        ):
+            return GuardrailDecision(
+                action=Action.BLOCK,
+                reason_code=weak_signal.reason_code,
+                policy_version=self._policy.policy_version,
+            )
 
         # 5. Default allow by route.
         return GuardrailDecision(
