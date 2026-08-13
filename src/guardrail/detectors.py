@@ -85,12 +85,23 @@ class OrderedKeywordDetector(Detector):
         )
 
     def detect(self, text: str) -> Signal | None:
-        text_lower = text.lower()
+        flattened = normalize_text(text).control_stripped
+        flattened_lower = flattened.lower()
 
         for rule in self._rules:
             for keyword in rule.keywords:
-                if keyword.lower() in text_lower:
-                    return Signal(rule.action, rule.reason_code)
+                keyword_lower = keyword.lower()
+
+                # Для коротких keywords используем word boundaries
+                # чтобы избежать "kill" in "skill"
+                if len(keyword_lower) <= 4:
+                    pattern = r'(?<!\w)' + re.escape(keyword_lower) + r'(?!\w)'
+                    if re.search(pattern, flattened_lower):
+                        return Signal(rule.action, rule.reason_code)
+                else:
+                    # Для длинных keywords используем substring matching
+                    if keyword_lower in flattened_lower:
+                        return Signal(rule.action, rule.reason_code)
 
         return None
 
