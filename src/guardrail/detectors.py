@@ -290,3 +290,27 @@ WEAK_KEYWORD_RULES: Final = (
         ),
     ),
 )
+
+
+EXACT_BASELINE_KEYWORD_RULES: Final = (
+    KeywordRule(
+        Action.BLOCK,
+        ReasonCode.PROMPT_OVERRIDE,
+        ("ignore", "system prompt", "reveal", "secret"),
+    ),
+    KeywordRule(
+        Action.BLOCK,
+        ReasonCode.MODERATION_EVASION,
+        ("bypass", "evade", "avoid the filter"),
+    ),
+    KeywordRule(
+        Action.BLOCK,
+        ReasonCode.GENERATE_ABUSE,
+        ("threaten", "intimidate", "kill"),
+    ),
+    KeywordRule(
+        Action.BLOCK,
+        ReasonCode.PRIVATE_DATA_REQUEST,
+        ("reporter identity", "private data", "home address"),
+    ),
+)

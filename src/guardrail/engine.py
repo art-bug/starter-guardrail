@@ -1,4 +1,4 @@
-"""Orchestration for the starter guardrail with a baseline-compatible mode."""
+"""Orchestration for the starter guardrail with an exact baseline mode."""
 
 from __future__ import annotations
 
@@ -9,19 +9,21 @@ from guardrail.detectors import (
     Detector,
     OrderedKeywordDetector,
     StrongRegexDetector,
+    EXACT_BASELINE_KEYWORD_RULES,
 )
 from guardrail.normalization import normalize_text
 from guardrail.policy import ROUTE_ALLOW_REASONS, StarterPolicy
-from guardrail.vector_detector import create_baseline_prototype_detector
+from guardrail.vector_detector import create_exact_baseline_prototype_detector
 
 
-# Если после замера score упадёт, поставь False.
-# Тогда останется только baseline-слой без extra regex.
-ENABLE_EXTRA_REGEX = True
+# Пока держим выключенным, чтобы измерить чистый baseline.
+# Если после восстановления score захочешь добавить recall-слой,
+# можно включить True.
+ENABLE_EXTRA_REGEX = False
 
 
 class StarterGuardrail:
-    """Baseline-first guardrail with an optional extra recall layer."""
+    """Exact-baseline guardrail built from current code."""
 
     def __init__(
         self,
@@ -33,8 +35,8 @@ class StarterGuardrail:
         )
 
         self._baseline_detectors = (
-            OrderedKeywordDetector(),
-            create_baseline_prototype_detector(),
+            OrderedKeywordDetector(rules=EXACT_BASELINE_KEYWORD_RULES),
+            create_exact_baseline_prototype_detector(),
         )
 
         self._extra_regex = (
@@ -58,7 +60,7 @@ class StarterGuardrail:
 
             return self._policy.decide(signals, route)
 
-        # 1. Baseline layer: original keyword detector + baseline vector detector.
+        # Exact baseline layer.
         signals = []
 
         for detector in self._baseline_detectors:
@@ -75,7 +77,7 @@ class StarterGuardrail:
                     policy_version=self._policy.policy_version,
                 )
 
-        # 2. Extra recall layer only if baseline allowed the request.
+        # Optional extra recall layer, currently disabled.
         if self._extra_regex is not None:
             extra_signal = self._extra_regex.detect(text)
 
@@ -86,7 +88,6 @@ class StarterGuardrail:
                     policy_version=self._policy.policy_version,
                 )
 
-        # 3. Default allow by route.
         return GuardrailDecision(
             action=Action.ALLOW,
             reason_code=ROUTE_ALLOW_REASONS[route],
