@@ -56,14 +56,17 @@ class StarterGuardrail:
         self._policy = policy or StarterPolicy()
 
     def check(self, request: GuardrailRequest) -> GuardrailDecision:
-        text = normalize_text(request.message or "").control_stripped
+        normalized = normalize_text(request.message or "")
+        text = normalized.control_stripped
+        has_suspicious = normalized.has_suspicious_controls  # НОВЫЙ сигнал
+
         route_str = (
             str(request.context.route.value)
             if hasattr(request.context.route, 'value')
             else str(request.context.route)
         )
 
-        # Custom detectors path (для совместимости)
+        # Custom detectors path
         if self._custom_detectors is not None:
             signals = []
             for detector in self._custom_detectors:
@@ -72,8 +75,13 @@ class StarterGuardrail:
                     signals.append(signal)
             return self._policy.decide(signals, request.context.route)
 
-        # Собираем голоса: {reason_code: [(weight, source), ...]}
+        # Собираем голоса
         votes: dict[str, list[tuple[float, str]]] = defaultdict(list)
+
+        # === НОВЫЙ: Suspicious controls signal ===
+        # Если текст содержит невидимые символы, это сильный сигнал обфускации.
+        # Добавляем голос за каждый reason_code, за который уже голосуют другие детекторы.
+        # Это усиливает corroboration bonus.
 
         # === Vector detector (с adaptive thresholds) ===
         vector_match = self._vector_detector.get_match(text)
@@ -89,32 +97,28 @@ class StarterGuardrail:
                     skip_vote = True
 
             if not skip_vote:
-                # Проверяем, прошёл ли вектор adaptive thresholds
                 block = False
                 if route_str in ("APPEAL", "ACCOUNT_SAFETY"):
                     if (attack_sim >= 0.70 and margin >= 0.10) or \
-                       (attack_sim >= 0.60 and margin >= 0.20):
+                            (attack_sim >= 0.60 and margin >= 0.20):
                         block = True
                 elif route_str == "REPORT":
                     if (attack_sim >= 0.60 and margin >= 0.08) or \
-                       (attack_sim >= 0.50 and margin >= 0.12) or \
-                       (attack_sim >= 0.40 and margin >= 0.18):
+                            (attack_sim >= 0.50 and margin >= 0.12) or \
+                            (attack_sim >= 0.40 and margin >= 0.18):
                         block = True
                 else:
-                    if (
-                        (attack_sim >= 0.65 and margin >= 0.03) or
-                        (attack_sim >= 0.50 and margin >= 0.08) or
-                        (attack_sim >= 0.40 and margin >= 0.12) or
-                        (attack_sim >= 0.35 and margin >= 0.20) or
-                        (attack_sim >= 0.30 and margin >= 0.30) or
-                        (attack_sim >= 0.25 and margin >= 0.15)
-                    ):
+                    if (attack_sim >= 0.65 and margin >= 0.03) or \
+                            (attack_sim >= 0.50 and margin >= 0.08) or \
+                            (attack_sim >= 0.40 and margin >= 0.12) or \
+                            (attack_sim >= 0.35 and margin >= 0.20) or \
+                            (attack_sim >= 0.30 and margin >= 0.30) or \
+                            (attack_sim >= 0.25 and margin >= 0.15):
                         block = True
 
                 if block:
                     votes[reason].append((VOTE_WEIGHTS["vector_confident"], "vector"))
                 elif attack_sim >= 0.25 and margin >= 0.05:
-                    # Weak vector vote
                     votes[reason].append((VOTE_WEIGHTS["vector_weak"], "vector"))
 
         # === Keyword detector ===
@@ -145,6 +149,15 @@ class StarterGuardrail:
                 (VOTE_WEIGHTS["overlap"], "overlap")
             )
 
+        # === НОВЫЙ: Suspicious controls усиливает существующие голоса ===
+        if has_suspicious and votes:
+            for reason in list(votes.keys()):
+                votes[reason].append((2.5, "suspicious_controls"))
+        elif has_suspicious and not votes:
+            # Если никто не голосует, но есть suspicious controls,
+            # добавляем слабый голос за PROMPT_OVERRIDE
+            votes[ReasonCode.PROMPT_OVERRIDE.value].append((2.0, "suspicious_controls"))
+
         # === Подсчёт голосов с corroboration bonus ===
         best_reason = None
         best_score = 0.0
@@ -153,15 +166,13 @@ class StarterGuardrail:
             if not vote_list:
                 continue
 
-            # Базовый score — сумма весов
             score = sum(weight for weight, _ in vote_list)
 
-            # Corroboration bonus: если голосовало больше одного источника
             unique_sources = len({source for _, source in vote_list})
             if unique_sources >= 2:
                 score *= CORROBORATION_MULTIPLIER
             if unique_sources >= 3:
-                score *= CORROBORATION_MULTIPLIER  # Двойной бонус
+                score *= CORROBORATION_MULTIPLIER
 
             if score > best_score:
                 best_score = score
@@ -175,7 +186,6 @@ class StarterGuardrail:
                 policy_version=self._policy.policy_version,
             )
 
-        # Default: allow by route
         return GuardrailDecision(
             action=Action.ALLOW,
             reason_code=ROUTE_ALLOW_REASONS[Route(request.context.route)],
