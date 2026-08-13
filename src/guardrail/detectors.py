@@ -36,6 +36,7 @@ class KeywordRule:
 
 
 DEFAULT_KEYWORD_RULES = (
+
     KeywordRule(
         Action.BLOCK,
         ReasonCode.PROMPT_OVERRIDE,
@@ -50,11 +51,12 @@ DEFAULT_KEYWORD_RULES = (
             "sudo mode", "admin override", "DAN mode",
         ),
     ),
+
     KeywordRule(
         Action.BLOCK,
         ReasonCode.MODERATION_EVASION,
         (
-            "bypass", "evade", "avoid the filter",
+            "evade", "avoid the filter",
             "get around", "slip past",
             "trick the filter", "trick the moderator",
             "workaround", "evade detection", "avoid detection",
@@ -64,11 +66,12 @@ DEFAULT_KEYWORD_RULES = (
             "leetspeak", "homograph", "split banned",
         ),
     ),
+
     KeywordRule(
         Action.BLOCK,
         ReasonCode.GENERATE_ABUSE,
         (
-            "threaten", "intimidate", "kill",
+            "threaten", "intimidate",
             "harass", "bully", "stalk", "torment",
             "death threat", "kill you", "hurt you",
             "write a threat", "compose a threat",
@@ -78,6 +81,7 @@ DEFAULT_KEYWORD_RULES = (
             "incite violence", "attack someone",
         ),
     ),
+
     KeywordRule(
         Action.BLOCK,
         ReasonCode.PRIVATE_DATA_REQUEST,
@@ -204,11 +208,11 @@ STRONG_REGEX_RULES: Final = (
         Action.BLOCK,
         ReasonCode.GENERATE_ABUSE,
         re.compile(
-            r"\b(?:write|draft|create|generate|compose|make|help\s+me\s+write)\b"          
-            r".{0,160}?"                                                                   
-            r"\b(?:threat\w*|intimidat\w*|abus\w*|harass\w*|hate\w*|violent\w*|coercive)\b"
-            r".{0,160}?"                                                                   
-            r"\b(?:message|text|post|comment|letter|email|content|note|language|target)\b",
+            r"\b(?:write|draft|create|generate|compose|make|author)\b"
+            r".{0,160}?"
+            r"\b(?:coercive|intimidating|threatening|abusive|harassing|hateful)\b"
+            r".{0,160}?"
+            r"\b(?:language|message|text|content|target|person|individual)\b",
             re.IGNORECASE | re.DOTALL,
         ),
     ),
@@ -216,9 +220,21 @@ STRONG_REGEX_RULES: Final = (
         Action.BLOCK,
         ReasonCode.GENERATE_ABUSE,
         re.compile(
-            r"\b(?:threaten\w*|intimidat\w*|harass\w*|stalk\w*|bully\w*|torment\w*|scare\w*|frighten\w*)\b"  
-            r".{0,140}?"                                                                                     
-            r"\b(?:person|user|individual|student|coworker|neighbor|someone|somebody|them|him|her|target)\b",
+            r"\b(?:write|draft|create|generate|compose|make|help\s+me\s+write)\b"       
+            r".{0,160}?"                                                                
+            r"\b(?:threat|threatening|intimidating|abusive|harassing|hateful|violent)\b"
+            r".{0,160}?"                                                                
+            r"\b(?:message|text|post|comment|letter|email|content|note)\b",
+            re.IGNORECASE | re.DOTALL,
+        ),
+    ),
+    RegexRule(
+        Action.BLOCK,
+        ReasonCode.GENERATE_ABUSE,
+        re.compile(
+            r"\b(?:threaten|intimidate|harass|stalk|bully|torment|scare|frighten)\b"
+            r".{0,140}?"
+            r"\b(?:person|user|individual|student|coworker|neighbor|someone|somebody|them|him|her)\b",
             re.IGNORECASE | re.DOTALL,
         ),
     ),
@@ -354,7 +370,7 @@ class FuzzyKeywordDetector(Detector):
     def __init__(
             self,
             rules: Sequence[KeywordRule] | None = None,
-            max_distance: int = 2,
+            max_distance: int = 1,
     ) -> None:
         configured = tuple(rules) if rules is not None else DEFAULT_KEYWORD_RULES
         self._rules = tuple(
