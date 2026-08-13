@@ -83,7 +83,7 @@ def _coerce_prototypes(prototypes: PrototypeInput) -> tuple[LabeledPrototype, ..
 def _normalized_features(normalized: str) -> Counter[str]:
     features: Counter[str] = Counter()
 
-    for size in range(3, 6):
+    for size in range(3, 7):
         features.update(
             f"char:{size}:{normalized[index:index + size]}"
             for index in range(len(normalized) - size + 1)
@@ -95,6 +95,22 @@ def _normalized_features(normalized: str) -> Counter[str]:
             f"word:{size}:{' '.join(words[index:index + size])}"
             for index in range(len(words) - size + 1)
         )
+
+        # Word trigrams
+    for index in range(len(words) - 2):
+        features[f"word:3:{' '.join(words[index:index + 3])}"] += 1
+
+    # Prefix features
+    for word in words:
+        if len(word) >= 4:
+            features[f"prefix:4:{word[:4]}"] += 1
+        if len(word) >= 5:
+            features[f"prefix:5:{word[:5]}"] += 1
+
+    # Suffix features
+    for word in words:
+        if len(word) >= 4:
+            features[f"suffix:4:{word[-4:]}"] += 1
 
     return features
 
@@ -113,24 +129,27 @@ def _vector(features: Counter[str], idf: Mapping[str, float]) -> Vector:
 
 
 def _vocabulary_vector(
-    normalized: str,
-    idf: Mapping[str, float],
+        normalized: str,
+        idf: Mapping[str, float],
 ) -> Vector:
     """Count an over-budget query without retaining out-of-vocabulary features."""
 
     features: Counter[str] = Counter()
 
-    for size in range(3, 6):
+    # Character n-grams (3-6) — теперь до 6, как в _normalized_features
+    for size in range(3, 7):
         for index in range(len(normalized) - size + 1):
             feature = f"char:{size}:{normalized[index:index + size]}"
             if feature in idf:
                 features[feature] += 1
 
+                # Word unigrams
     for match in finditer(r"\w+", normalized):
         feature = f"word:1:{match.group()}"
         if feature in idf:
             features[feature] += 1
 
+    # Word bigrams
     previous_word: str | None = None
     for match in finditer(r"\w+", normalized):
         word = match.group()
@@ -139,6 +158,33 @@ def _vocabulary_vector(
             if feature in idf:
                 features[feature] += 1
         previous_word = word
+
+    # Word trigrams (НОВОЕ)
+    words: list[str] = []
+    for match in finditer(r"\w+", normalized):
+        words.append(match.group())
+    for index in range(len(words) - 2):
+        feature = f"word:3:{words[index]} {words[index + 1]} {words[index + 2]}"
+        if feature in idf:
+            features[feature] += 1
+
+    # Prefix features (НОВОЕ)
+    for word in words:
+        if len(word) >= 4:
+            feature = f"prefix:4:{word[:4]}"
+            if feature in idf:
+                features[feature] += 1
+        if len(word) >= 5:
+            feature = f"prefix:5:{word[:5]}"
+            if feature in idf:
+                features[feature] += 1
+
+    # Suffix features (НОВОЕ)
+    for word in words:
+        if len(word) >= 4:
+            feature = f"suffix:4:{word[-4:]}"
+            if feature in idf:
+                features[feature] += 1
 
     return _vector(features, idf)
 

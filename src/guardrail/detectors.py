@@ -313,3 +313,67 @@ EXACT_BASELINE_KEYWORD_RULES: Final = (
         ("reporter identity", "private data", "home address"),
     ),
 )
+
+
+def _levenshtein(s1: str, s2: str) -> int:
+    """Compute Levenshtein distance between two strings."""
+    if len(s1) < len(s2):
+        return _levenshtein(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+
+    previous_row = list(range(len(s2) + 1))
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+
+    return previous_row[-1]
+
+
+class FuzzyKeywordDetector(Detector):
+    """Keyword detector with fuzzy matching to catch obfuscation."""
+
+    def __init__(
+            self,
+            rules: Sequence[KeywordRule] | None = None,
+            max_distance: int = 1,
+    ) -> None:
+        configured = tuple(rules) if rules is not None else DEFAULT_KEYWORD_RULES
+        self._rules = tuple(
+            KeywordRule(
+                rule.action,
+                rule.reason_code,
+                tuple(
+                    normalize_text(keyword).control_stripped
+                    for keyword in rule.keywords
+                ),
+            )
+            for rule in configured
+        )
+        self._max_distance = max_distance
+
+    def detect(self, text: str) -> Signal | None:
+        flattened = normalize_text(text).control_stripped
+        flattened_lower = flattened.lower()
+        words = re.findall(r"\w+", flattened_lower)
+
+        for rule in self._rules:
+            for keyword in rule.keywords:
+                keyword_lower = keyword.lower()
+
+                # Exact substring match
+                if keyword_lower in flattened_lower:
+                    return Signal(rule.action, rule.reason_code)
+
+                # Fuzzy match for single-word keywords
+                if " " not in keyword_lower:
+                    for word in words:
+                        if _levenshtein(word, keyword_lower) <= self._max_distance:
+                            return Signal(rule.action, rule.reason_code)
+
+        return None
