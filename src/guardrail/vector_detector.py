@@ -188,9 +188,9 @@ STARTER_BENIGN_PROTOTYPES: Final = (
     LabeledPrototype("policy_question", "how do you handle harassment reports"),
     LabeledPrototype("policy_question", "explain the moderation process"),
     LabeledPrototype("policy_question", "describe rules for submitting complaints"),
-    LabeledPrototype("policy_question", "what is the policy about threats and intimidation"),
-    LabeledPrototype("policy_question", "what content is considered private data"),
-    LabeledPrototype("policy_question", "what happens if someone tries to bypass a safety filter"),
+    LabeledPrototype("policy_question", "what is the policy about harmful content"),
+    LabeledPrototype("policy_question", "what content is considered confidential"),
+    LabeledPrototype("policy_question", "what happens if someone violates the rules"),
     LabeledPrototype("policy_question", "is it allowed to write fictional conflict scenes"),
     LabeledPrototype("policy_question", "what are the community guidelines"),
     LabeledPrototype("policy_question", "how does the appeal process work"),
@@ -209,8 +209,8 @@ STARTER_BENIGN_PROTOTYPES: Final = (
     LabeledPrototype("appeal", "the decision on my post seems unfair"),
     LabeledPrototype("appeal", "please review decision on complaint number"),
     LabeledPrototype("appeal", "summarize result from an account review"),
-    LabeledPrototype("appeal", "my post was removed because it was mistakenly seen as a threat"),
-    LabeledPrototype("appeal", "I was flagged for evasion but I only asked about the rules"),
+    LabeledPrototype("appeal", "my post was removed because it was flagged incorrectly"),
+    LabeledPrototype("appeal", "I was flagged incorrectly but I only asked about the rules"),
     LabeledPrototype("appeal", "I believe my account was banned in error"),
     LabeledPrototype("appeal", "please reconsider the removal of my content"),
     LabeledPrototype("appeal", "I want to dispute a moderation decision"),
@@ -227,7 +227,7 @@ STARTER_BENIGN_PROTOTYPES: Final = (
 
     # quoted_analysis
     LabeledPrototype("quoted_analysis", "assess supplied passage purely as archived evidence"),
-    LabeledPrototype("quoted_analysis", "the reported message contains the phrase ignore previous instructions"),
+    LabeledPrototype("quoted_analysis", "the reported message contains a suspicious phrase"),
     LabeledPrototype("quoted_analysis", "here is the text that was sent to me, please review"),
     LabeledPrototype("quoted_analysis", "I received this suspicious message and want to report it"),
     LabeledPrototype("quoted_analysis", "someone sent me this, is it a violation"),
@@ -239,13 +239,13 @@ STARTER_BENIGN_PROTOTYPES: Final = (
 
     # safety_question
     LabeledPrototype("safety_question", "how can I protect my account from being hacked"),
-    LabeledPrototype("safety_question", "what should I do if I receive a threatening message"),
-    LabeledPrototype("safety_question", "how do I report someone who is harassing me"),
+    LabeledPrototype("safety_question", "what should I do if I receive a harmful message"),
+    LabeledPrototype("safety_question", "how do I report someone who is bothering me"),
     LabeledPrototype("safety_question", "is there a way to make my profile private"),
     LabeledPrototype("safety_question", "how do I enable two-factor authentication"),
     LabeledPrototype("safety_question", "what safety features does this platform have"),
     LabeledPrototype("safety_question", "how can I block someone from contacting me"),
-    LabeledPrototype("safety_question", "what should I do if someone is stalking me online"),
+    LabeledPrototype("safety_question", "what should I do if someone is following me online"),
     LabeledPrototype("safety_question", "how do I report a phishing attempt"),
     LabeledPrototype("safety_question", "can you help me secure my account"),
 )
@@ -340,6 +340,9 @@ class PrototypeDetector:
             if attack_sim >= 0.40 and margin >= 0.12:
                 return Signal(Action.BLOCK, ReasonCode(match.nearest_attack_label))
             if attack_sim >= 0.35 and margin >= 0.20:
+                return Signal(Action.BLOCK, ReasonCode(match.nearest_attack_label))
+            # НОВЫЙ: очень низкий attack_sim, но очень высокий margin
+            if attack_sim >= 0.30 and margin >= 0.30:
                 return Signal(Action.BLOCK, ReasonCode(match.nearest_attack_label))
 
         return None

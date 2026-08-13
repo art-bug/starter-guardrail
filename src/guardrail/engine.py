@@ -9,6 +9,7 @@ from guardrail.detectors import (
     Detector,
     FuzzyKeywordDetector,
     OrderedKeywordDetector,
+    StrongRegexDetector,
 )
 from guardrail.normalization import normalize_text
 from guardrail.policy import ROUTE_ALLOW_REASONS, StarterPolicy
@@ -16,7 +17,7 @@ from guardrail.vector_detector import create_starter_prototype_detector
 
 
 class StarterGuardrail:
-    """Normalize, detect with keyword + vector, and fuse with route awareness."""
+    """Four-layer detection: keyword → fuzzy → vector → regex."""
 
     def __init__(
         self,
@@ -27,14 +28,17 @@ class StarterGuardrail:
             tuple(detectors) if detectors is not None else None
         )
 
-        # Layer 1: Exact keyword matching (baseline)
+        # Layer 1: Exact keyword matching (substring)
         self._keyword_detector = OrderedKeywordDetector()
 
-        # Layer 2: Fuzzy keyword matching (catches obfuscation)
+        # Layer 2: Fuzzy keyword matching
         self._fuzzy_detector = FuzzyKeywordDetector()
 
-        # Layer 3: Vector prototype matching
+        # Layer 3: Vector prototype matching (adaptive thresholds)
         self._vector_detector = create_starter_prototype_detector()
+
+        # Layer 4: Regex pattern matching
+        self._regex_detector = StrongRegexDetector()
 
         self._policy = policy or StarterPolicy()
 
@@ -51,7 +55,7 @@ class StarterGuardrail:
                     signals.append(signal)
             return self._policy.decide(signals, request.context.route)
 
-        # Layer 1: Exact keyword match (highest priority)
+        # Layer 1: Exact keyword match
         keyword_signal = self._keyword_detector.detect(text)
         if keyword_signal is not None:
             return GuardrailDecision(
@@ -69,12 +73,21 @@ class StarterGuardrail:
                 policy_version=self._policy.policy_version,
             )
 
-        # Layer 3: Vector prototype match with route-aware thresholds
+        # Layer 3: Vector prototype match with adaptive thresholds
         vector_signal = self._vector_detector.detect(text, route=route_str)
         if vector_signal is not None:
             return GuardrailDecision(
                 action=Action.BLOCK,
                 reason_code=vector_signal.reason_code,
+                policy_version=self._policy.policy_version,
+            )
+
+        # Layer 4: Regex pattern match (catches complex patterns)
+        regex_signal = self._regex_detector.detect(text)
+        if regex_signal is not None:
+            return GuardrailDecision(
+                action=Action.BLOCK,
+                reason_code=regex_signal.reason_code,
                 policy_version=self._policy.policy_version,
             )
 
