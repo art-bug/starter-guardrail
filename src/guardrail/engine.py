@@ -1,4 +1,4 @@
-"""Orchestration for the starter guardrail with multi-layer detection."""
+"""Orchestration for the starter guardrail."""
 
 from __future__ import annotations
 
@@ -7,9 +7,7 @@ from collections.abc import Sequence
 from common import Action, GuardrailDecision, GuardrailRequest, Route
 from guardrail.detectors import (
     Detector,
-    FuzzyKeywordDetector,
     OrderedKeywordDetector,
-    StrongRegexDetector,
 )
 from guardrail.normalization import normalize_text
 from guardrail.policy import ROUTE_ALLOW_REASONS, StarterPolicy
@@ -17,7 +15,7 @@ from guardrail.vector_detector import create_starter_prototype_detector
 
 
 class StarterGuardrail:
-    """Five-layer detection: exact → regex → fuzzy → vector → allow."""
+    """Normalize, detect with keyword + vector, and fuse."""
 
     def __init__(
         self,
@@ -28,16 +26,7 @@ class StarterGuardrail:
             tuple(detectors) if detectors is not None else None
         )
 
-        # Layer 1: Exact keyword matching
         self._keyword_detector = OrderedKeywordDetector()
-
-        # Layer 2: Regex pattern matching
-        self._regex_detector = StrongRegexDetector()
-
-        # Layer 3: Fuzzy keyword matching
-        self._fuzzy_detector = FuzzyKeywordDetector(max_distance=2)
-
-        # Layer 4: Vector prototype matching
         self._vector_detector = create_starter_prototype_detector()
 
         self._policy = policy or StarterPolicy()
@@ -64,25 +53,7 @@ class StarterGuardrail:
                 policy_version=self._policy.policy_version,
             )
 
-        # Layer 2: Regex pattern match
-        regex_signal = self._regex_detector.detect(text)
-        if regex_signal is not None:
-            return GuardrailDecision(
-                action=Action.BLOCK,
-                reason_code=regex_signal.reason_code,
-                policy_version=self._policy.policy_version,
-            )
-
-        # Layer 3: Fuzzy keyword match
-        fuzzy_signal = self._fuzzy_detector.detect(text)
-        if fuzzy_signal is not None:
-            return GuardrailDecision(
-                action=Action.BLOCK,
-                reason_code=fuzzy_signal.reason_code,
-                policy_version=self._policy.policy_version,
-            )
-
-        # Layer 4: Vector prototype match with route-aware thresholds
+        # Layer 2: Vector prototype match with route-aware thresholds
         vector_signal = self._vector_detector.detect(text, route=route_str)
         if vector_signal is not None:
             return GuardrailDecision(
