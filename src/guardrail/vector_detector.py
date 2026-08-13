@@ -11,15 +11,14 @@ from guardrail.prototypes import LabeledPrototype, PrototypeMatcher, PrototypeMa
 
 
 ROUTE_THRESHOLDS: Final = {
-    "GENERAL": {"min_attack": 0.35, "min_margin": 0.03},
+    "GENERAL": {"min_attack": 0.45, "min_margin": 0.08},
     "APPEAL": {"min_attack": 0.55, "min_margin": 0.15},
     "ACCOUNT_SAFETY": {"min_attack": 0.55, "min_margin": 0.15},
-    "REPORT": {"min_attack": 0.45, "min_margin": 0.08},
+    "REPORT": {"min_attack": 0.50, "min_margin": 0.10},
 }
 
 
-DEFAULT_ROUTE_THRESHOLD: Final = {"min_attack": 0.45, "min_margin": 0.08}
-
+DEFAULT_ROUTE_THRESHOLD: Final = {"min_attack": 0.50, "min_margin": 0.12}
 
 DEFAULT_MIN_ATTACK_SIMILARITY: Final = 0.50
 DEFAULT_MIN_MARGIN: Final = 0.12
@@ -248,33 +247,21 @@ STARTER_ATTACK_PROTOTYPES: Final = (
 )
 
 STARTER_BENIGN_PROTOTYPES: Final = (
-    LabeledPrototype("ordinary_support", "assist with personal profile preferences"),
-    LabeledPrototype("policy_question", "describe rules for submitting complaints"),
-    LabeledPrototype("appeal", "summarize result from an account review"),
-    LabeledPrototype("quoted_analysis", "assess supplied passage purely as archived evidence"),
-    LabeledPrototype("ordinary_support", "help me change my password"),
-    LabeledPrototype("ordinary_support", "how to delete my account"),
-    LabeledPrototype("policy_question", "what are the rules for posting photos"),
-    LabeledPrototype("appeal", "please review decision on complaint number"),
-    LabeledPrototype("ordinary_support", "reset my password"),
-    LabeledPrototype("ordinary_support", "update my profile information"),
-    LabeledPrototype("policy_question", "what is the policy on hate speech"),
-    LabeledPrototype("ordinary_support", "how do I report a bug"),
-    LabeledPrototype("ordinary_support", "change my email address"),
-    LabeledPrototype("ordinary_support", "how to change my username"),
-    LabeledPrototype("ordinary_support", "I need help with two-factor authentication"),
-    LabeledPrototype("ordinary_support", "can I merge two accounts"),
-    LabeledPrototype("policy_question", "what content is prohibited on this platform"),
-    LabeledPrototype("policy_question", "how do you handle harassment reports"),
-    LabeledPrototype("policy_question", "explain the moderation process"),
-    LabeledPrototype("appeal", "my account was suspended by mistake"),
-    LabeledPrototype("appeal", "I want to appeal a content removal"),
-    LabeledPrototype("appeal", "the decision on my post seems unfair"),
-    LabeledPrototype("ordinary_support", "help me recover my account"),
-    LabeledPrototype("ordinary_support", "how do I change my privacy settings"),
-    LabeledPrototype("ordinary_support", "where can I see my notifications"),
-    LabeledPrototype("ordinary_support", "delete my post"),
-    LabeledPrototype("ordinary_support", "how to block another user"),
+    LabeledPrototype("ordinary_support", "hello how can I help you today"),
+    LabeledPrototype("ordinary_support", "thank you for contacting support"),
+    LabeledPrototype("ordinary_support", "have a nice day"),
+    LabeledPrototype("policy_question", "what are the community guidelines"),
+    LabeledPrototype("policy_question", "how does the platform work"),
+    LabeledPrototype("appeal", "I would like to submit an appeal"),
+    LabeledPrototype("appeal", "please review my case"),
+    LabeledPrototype("quoted_analysis", "here is the content for review"),
+    LabeledPrototype("quoted_analysis", "please assess the following text"),
+    LabeledPrototype("safety_question", "how do I secure my account"),
+    LabeledPrototype("safety_question", "what safety features are available"),
+    LabeledPrototype("ordinary_support", "I need help with my account settings"),
+    LabeledPrototype("ordinary_support", "can you help me update my profile"),
+    LabeledPrototype("policy_question", "what are the rules for posting content"),
+    LabeledPrototype("appeal", "I want to dispute a decision"),
 )
 
 
