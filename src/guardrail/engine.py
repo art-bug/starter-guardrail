@@ -17,24 +17,22 @@ from guardrail.policy import ROUTE_ALLOW_REASONS, StarterPolicy
 from guardrail.vector_detector import create_starter_prototype_detector
 
 
-_INLINE_QUOTE_RE = re.compile(
-    r"(?s)(?:\"[^\"]{0,4000}\"|“[^”]{0,4000}”|`[^`]{0,4000}`|\[quote[^\]]*\].*?\[/quote\])",
+_QUOTE_BLOCK_RE = re.compile(
+    r"(?is)\[quote[^\]]*\].*?\[/quote\]",
     re.IGNORECASE,
 )
 
 _QUOTED_LINE_RE = re.compile(
-    r"(?im)^\s*(?:>|\|).*$"
+    r"(?im)^\s*>.*$"
 )
 
 _SPACES_RE = re.compile(r"\s+")
 
 
 def _remove_quoted(text: str) -> str:
-    """Remove obvious quoted/evidence spans from active user intent."""
-
-    text = _INLINE_QUOTE_RE.sub(" ", text)
+    """Remove only explicit quote blocks and markdown-style quoted lines."""
+    text = _QUOTE_BLOCK_RE.sub(" ", text)
     text = _QUOTED_LINE_RE.sub(" ", text)
-
     return _SPACES_RE.sub(" ", text).strip()
 
 
@@ -65,6 +63,7 @@ class StarterGuardrail:
         )
 
         self._strong_regex = StrongRegexDetector()
+        self._keywords = OrderedKeywordDetector()
         self._weak_keywords = OrderedKeywordDetector(rules=WEAK_KEYWORD_RULES)
         self._prototype = create_starter_prototype_detector()
         self._policy = policy or StarterPolicy()
@@ -84,7 +83,7 @@ class StarterGuardrail:
 
             return self._policy.decide(signals, route)
 
-        # 1. Strong deterministic patterns block immediately.
+        # 1. Strong regex remains an immediate block.
         strong_signal = self._strong_regex.detect(active)
         if strong_signal is not None:
             return GuardrailDecision(
@@ -93,34 +92,40 @@ class StarterGuardrail:
                 policy_version=self._policy.policy_version,
             )
 
-        # 2. Weak keywords alone do not block.
-        weak_signal = self._weak_keywords.detect(active)
-
-        # 3. Vector signal is used only if confident or corroborated.
+        # 2. Original keyword rules are allowed to block again,
+        # but can be suppressed only if the vector match is strongly benign.
         match = self._prototype.match(active)
 
-        if match is not None:
-            # Very confident vector-only block.
-            if self._prototype.is_confident_block(match):
-                return GuardrailDecision(
-                    action=Action.BLOCK,
-                    reason_code=ReasonCode(match.nearest_attack_label),
-                    policy_version=self._policy.policy_version,
-                )
+        keyword_signal = self._keywords.detect(active)
+        if keyword_signal is not None and not self._prototype.is_benign_suppression(match):
+            return GuardrailDecision(
+                action=Action.BLOCK,
+                reason_code=keyword_signal.reason_code,
+                policy_version=self._policy.policy_version,
+            )
 
-            # Weaker vector block only if a matching weak keyword confirms it.
-            if (
+        # 3. Vector block with near-baseline thresholds.
+        if match is not None and self._prototype.is_confident_block(match):
+            return GuardrailDecision(
+                action=Action.BLOCK,
+                reason_code=ReasonCode(match.nearest_attack_label),
+                policy_version=self._policy.policy_version,
+            )
+
+        # 4. Weak keyword + vector corroboration.
+        weak_signal = self._weak_keywords.detect(active)
+        if (
                 weak_signal is not None
-                and weak_signal.reason_code.value == match.nearest_attack_label
+                and match is not None
                 and self._prototype.is_corroborated_block(match)
-            ):
-                return GuardrailDecision(
-                    action=Action.BLOCK,
-                    reason_code=weak_signal.reason_code,
-                    policy_version=self._policy.policy_version,
-                )
+        ):
+            return GuardrailDecision(
+                action=Action.BLOCK,
+                reason_code=weak_signal.reason_code,
+                policy_version=self._policy.policy_version,
+            )
 
-        # 4. Default: allow by route.
+        # 5. Default allow by route.
         return GuardrailDecision(
             action=Action.ALLOW,
             reason_code=ROUTE_ALLOW_REASONS[route],

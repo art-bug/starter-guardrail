@@ -9,12 +9,12 @@ from common import Action, ReasonCode
 from guardrail.detectors import Signal
 from guardrail.prototypes import LabeledPrototype, PrototypeMatcher, PrototypeMatch
 
-DEFAULT_MIN_ATTACK_SIMILARITY: Final = 0.65
-DEFAULT_MIN_MARGIN: Final = 0.20
-DEFAULT_MAX_BENIGN_SIMILARITY: Final = 0.72
+DEFAULT_MIN_ATTACK_SIMILARITY: Final = 0.50
+DEFAULT_MIN_MARGIN: Final = 0.12
+DEFAULT_MAX_BENIGN_SIMILARITY: Final = 0.90
 
-CORROBORATED_MIN_ATTACK_SIMILARITY: Final = 0.54
-CORROBORATED_MIN_MARGIN: Final = 0.14
+CORROBORATED_MIN_ATTACK_SIMILARITY: Final = 0.50
+CORROBORATED_MIN_MARGIN: Final = 0.10
 
 SUPPORTED_ATTACK_REASONS: Final = frozenset(
     {
@@ -286,6 +286,18 @@ class PrototypeDetector:
             min_attack_similarity=self.corroborated_min_attack_similarity,
             min_margin=self.corroborated_min_margin,
             max_benign_similarity=self.max_benign_similarity,
+        )
+
+    @staticmethod
+    def is_benign_suppression(match: PrototypeMatch | None) -> bool:
+        """Very conservative suppression only when text looks strongly benign."""
+
+        if match is None:
+            return False
+
+        return (
+            match.nearest_benign_similarity >= 0.90
+            and match.margin <= 0.0
         )
 
     def detect(self, text: str) -> Signal | None:
