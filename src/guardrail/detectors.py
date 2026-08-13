@@ -54,7 +54,13 @@ DEFAULT_KEYWORD_RULES = (
     KeywordRule(
         Action.BLOCK,
         ReasonCode.PRIVATE_DATA_REQUEST,
-        ("reporter identity", "private data", "home address"),
+        (
+            "private data",
+            "home address",
+            "phone number",
+            "personal information",
+            "reporter identity",
+        ),
     ),
 )
 
@@ -105,6 +111,134 @@ class AllowListDetector(Detector):
     def detect(self, text: str) -> Signal | None:
         if any(allow in text.lower() for allow in DEFAULT_ALLOW_LIST):
             return Signal(Action.ALLOW, ReasonCode.ORDINARY_SUPPORT)
+
+        return None
+
+
+@dataclass(frozen=True, slots=True)
+class RegexRule:
+    """Deterministic regex-based rule for stronger attack patterns."""
+
+    action: Action
+    reason_code: ReasonCode
+    pattern: re.Pattern
+
+
+def _compile_rule(pattern: str) -> re.Pattern:
+    return re.compile(pattern, re.IGNORECASE | re.DOTALL)
+
+
+STRONG_REGEX_RULES: Final = (
+
+    # PROMPT_OVERRIDE
+    RegexRule(
+        Action.BLOCK,
+        ReasonCode.PROMPT_OVERRIDE,
+        _compile_rule(
+            r"\b(?:ignore|disregard|forget|override)\b"
+            r".{0,140}?"
+            r"\b(?:previous|prior|system|developer|initial|hidden|original|safety|content|moderation)\b"
+            r".{0,140}?"
+            r"\b(?:instructions?|prompts?|rules?|guidelines?|settings?|configuration|"
+            r"directions?|directives?|commands?|orders?)\b"
+        ),
+    ),
+    RegexRule(
+        Action.BLOCK,
+        ReasonCode.PROMPT_OVERRIDE,
+        _compile_rule(
+            r"\b(?:ignore|disregard|forget|override)\b"
+            r".{0,80}?"
+            r"\ball\b"
+            r".{0,80}?"
+            r"\b(?:instructions?|prompts?|rules?|guidelines?|settings?|configuration)\b"
+        ),
+    ),
+    RegexRule(
+        Action.BLOCK,
+        ReasonCode.PROMPT_OVERRIDE,
+        _compile_rule(
+            r"\b(?:reveal|show|print|display|output|repeat|leak|expose|disclose|tell)\b"
+            r".{0,140}?"
+            r"\b(?:system\s+prompt|hidden\s+prompt|initial\s+prompt|original\s+prompt|"
+            r"secret(?:\s+(?:key|token|config|settings))?|hidden\s+settings|"
+            r"hidden\s+configuration|confidential\s+settings)\b"
+        ),
+    ),
+
+    # MODERATION_EVASION
+    RegexRule(
+        Action.BLOCK,
+        ReasonCode.MODERATION_EVASION,
+        _compile_rule(
+            r"\b(?:bypass|evade|circumvent|trick|fool|get\s+around)\b"
+            r".{0,140}?"
+            r"\b(?:filter|filters|moderation|safety|safeguard|safeguards|review|detection|policy|controls?)\b"
+        ),
+    ),
+
+    # GENERATE_ABUSE
+    RegexRule(
+        Action.BLOCK,
+        ReasonCode.GENERATE_ABUSE,
+        _compile_rule(
+            r"\b(?:write|draft|create|generate|compose|make|help\s+me\s+write)\b"
+            r".{0,180}?"
+            r"\b(?:threat|threatening|intimidating|abusive|harassing|hateful|violent)\b"
+            r".{0,180}?"
+            r"\b(?:message|text|post|comment|letter|email|content|note)\b"
+        ),
+    ),
+    RegexRule(
+        Action.BLOCK,
+        ReasonCode.GENERATE_ABUSE,
+        _compile_rule(
+            r"\b(?:threaten|intimidate|harass|stalk|bully)\b"
+            r".{0,160}?"
+            r"\b(?:person|user|individual|student|coworker|neighbor|someone|somebody|them|him|her)\b"
+        ),
+    ),
+
+    # PRIVATE_DATA_REQUEST
+    RegexRule(
+        Action.BLOCK,
+        ReasonCode.PRIVATE_DATA_REQUEST,
+        _compile_rule(
+            r"\b(?:find|get|reveal|show|extract|retrieve|dox|leak|share|publish|look\s+up)\b"
+            r".{0,180}?"
+            r"\b(?:home\s+address|phone\s+number|email(?:\s+address)?|location|"
+            r"private\s+data|personal\s+information|contact\s+info|contact\s+information)\b"
+            r".{0,180}?"
+            r"\b(?:of|about|for|belonging\s+to)\b"
+            r".{0,180}?"
+            r"\b(?:someone|somebody|person|user|individual|victim|target)\b"
+        ),
+    ),
+    RegexRule(
+        Action.BLOCK,
+        ReasonCode.PRIVATE_DATA_REQUEST,
+        _compile_rule(
+            r"\b(?:tell|give|show|reveal|disclose|provide|find|get|extract|retrieve|share|publish|look\s+up)\b"
+            r".{0,180}?"
+            r"\b(?:reporter(?:'s|s)?\s+identity|identity\s+of\s+(?:the\s+)?reporter|"
+            r"source(?:'s|s)?\s+identity|identity\s+of\s+(?:the\s+)?source)\b"
+        ),
+    ),
+)
+
+
+class StrongRegexDetector(Detector):
+    """Return the first strong regex-based signal."""
+
+    def __init__(self, rules: Sequence[RegexRule] | None = None) -> None:
+        self._rules = tuple(rules) if rules is not None else STRONG_REGEX_RULES
+
+    def detect(self, text: str) -> Signal | None:
+        flattened = normalize_text(text).control_stripped
+
+        for rule in self._rules:
+            if rule.pattern.search(flattened):
+                return Signal(rule.action, rule.reason_code)
 
         return None
 
@@ -201,10 +335,14 @@ def _levenshtein(s1: str, s2: str) -> int:
     return previous_row[-1]
 
 
-class SubstringKeywordDetector(Detector):
-    """Keyword detector using substring matching (no word boundaries)."""
+class FuzzyKeywordDetector(Detector):
+    """Keyword detector with fuzzy matching to catch obfuscation."""
 
-    def __init__(self, rules: Sequence[KeywordRule] | None = None) -> None:
+    def __init__(
+            self,
+            rules: Sequence[KeywordRule] | None = None,
+            max_distance: int = 1,
+    ) -> None:
         configured = tuple(rules) if rules is not None else DEFAULT_KEYWORD_RULES
         self._rules = tuple(
             KeywordRule(
@@ -217,120 +355,25 @@ class SubstringKeywordDetector(Detector):
             )
             for rule in configured
         )
+        self._max_distance = max_distance
 
     def detect(self, text: str) -> Signal | None:
         flattened = normalize_text(text).control_stripped
         flattened_lower = flattened.lower()
+        words = re.findall(r"\w+", flattened_lower)
 
         for rule in self._rules:
             for keyword in rule.keywords:
-                if keyword.lower() in flattened_lower:
+                keyword_lower = keyword.lower()
+
+                # Exact substring match
+                if keyword_lower in flattened_lower:
                     return Signal(rule.action, rule.reason_code)
 
-        return None
-
-
-import re as _re
-
-
-@dataclass(frozen=True, slots=True)
-class RegexRule:
-    action: Action
-    reason_code: ReasonCode
-    pattern: _re.Pattern
-
-
-REGEX_RULES: Final = (
-    # PROMPT_OVERRIDE
-    RegexRule(
-        Action.BLOCK,
-        ReasonCode.PROMPT_OVERRIDE,
-        _re.compile(
-            r"\b(?:ignore|disregard|forget|override|bypass)\w*\b"
-            r".{0,120}?"
-            r"\b(?:previous|prior|all|system|developer|initial|hidden|original|safety|content|moderation)\b"
-            r".{0,120}?"
-            r"\b(?:instructions?|prompts?|rules?|guidelines?|settings?|configuration|directions?|directives?|commands?|orders?)\b",
-            _re.IGNORECASE | _re.DOTALL,
-        ),
-    ),
-    RegexRule(
-        Action.BLOCK,
-        ReasonCode.PROMPT_OVERRIDE,
-        _re.compile(
-            r"\b(?:reveal|show|print|display|output|repeat|leak|expose|disclose|tell)\w*\b"
-            r".{0,120}?"
-            r"\b(?:system\s+prompt|hidden\s+prompt|initial\s+prompt|original\s+prompt|"
-            r"secret(?:\s+(?:key|token|config|settings))?|hidden\s+settings|"
-            r"hidden\s+configuration|confidential\s+settings)\b",
-            _re.IGNORECASE | _re.DOTALL,
-        ),
-    ),
-
-    # MODERATION_EVASION
-    RegexRule(
-        Action.BLOCK,
-        ReasonCode.MODERATION_EVASION,
-        _re.compile(
-            r"\b(?:bypass|evade|circumvent|trick|fool|get\s+around|slip\s+past|avoid)\w*\b"
-            r".{0,120}?"
-            r"\b(?:filter|filters|moderation|safety|safeguard|safeguards|review|detection|policy|controls?)\b",
-            _re.IGNORECASE | _re.DOTALL,
-        ),
-    ),
-
-    # GENERATE_ABUSE
-    RegexRule(
-        Action.BLOCK,
-        ReasonCode.GENERATE_ABUSE,
-        _re.compile(
-            r"\b(?:write|draft|create|generate|compose|make|author)\w*\b"
-            r".{0,160}?"
-            r"\b(?:threat\w*|intimidat\w*|abus\w*|harass\w*|hate\w*|violent\w*|coercive|scary|frightening)\b"
-            r".{0,160}?"
-            r"\b(?:message|text|post|comment|letter|email|content|note|language|target|person|individual)\b",
-            _re.IGNORECASE | _re.DOTALL,
-        ),
-    ),
-    RegexRule(
-        Action.BLOCK,
-        ReasonCode.GENERATE_ABUSE,
-        _re.compile(
-            r"\b(?:threaten|intimidate|harass|stalk|bully|torment|scare|frighten)\w*\b"
-            r".{0,140}?"
-            r"\b(?:person|user|individual|student|coworker|neighbor|someone|somebody|them|him|her|target)\b",
-            _re.IGNORECASE | _re.DOTALL,
-        ),
-    ),
-
-    # PRIVATE_DATA_REQUEST
-    RegexRule(
-        Action.BLOCK,
-        ReasonCode.PRIVATE_DATA_REQUEST,
-        _re.compile(
-            r"\b(?:find|get|reveal|show|extract|retrieve|dox|leak|share|publish|look\s+up|tell)\w*\b"
-            r".{0,160}?"
-            r"\b(?:home\s+address|phone\s+number|email(?:\s+address)?|location|"
-            r"private\s+data|personal\s+(?:info|information|details)|contact\s+(?:info|information)|"
-            r"reporter(?:'s|s)?\s+identity|identity\s+of\s+(?:the\s+)?reporter|"
-            r"source(?:'s|s)?\s+identity|identity\s+of\s+(?:the\s+)?source)\b",
-            _re.IGNORECASE | _re.DOTALL,
-        ),
-    ),
-)
-
-
-class RegexDetector(Detector):
-    """Return the first regex-based signal."""
-
-    def __init__(self, rules: Sequence[RegexRule] | None = None) -> None:
-        self._rules = tuple(rules) if rules is not None else REGEX_RULES
-
-    def detect(self, text: str) -> Signal | None:
-        flattened = normalize_text(text).control_stripped
-
-        for rule in self._rules:
-            if rule.pattern.search(flattened):
-                return Signal(rule.action, rule.reason_code)
+                # Fuzzy match for single-word keywords
+                if " " not in keyword_lower:
+                    for word in words:
+                        if _levenshtein(word, keyword_lower) <= self._max_distance:
+                            return Signal(rule.action, rule.reason_code)
 
         return None
