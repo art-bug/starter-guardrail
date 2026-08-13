@@ -95,16 +95,21 @@ class StarterGuardrail:
         # 2. Original keyword rules are allowed to block again,
         # but can be suppressed only if the vector match is strongly benign.
         match = self._prototype.match(active)
+        is_strongly_benign = (
+            match is not None
+            and match.nearest_benign_similarity >= 0.90
+            and match.margin <= 0.0
+        )
 
         keyword_signal = self._keywords.detect(active)
-        if keyword_signal is not None and not self._prototype.is_benign_suppression(match):
+        if keyword_signal is not None and not is_strongly_benign:
             return GuardrailDecision(
                 action=Action.BLOCK,
                 reason_code=keyword_signal.reason_code,
                 policy_version=self._policy.policy_version,
             )
 
-        # 3. Vector block with near-baseline thresholds.
+            # 3. Vector block with near-baseline thresholds.
         if match is not None and self._prototype.is_confident_block(match):
             return GuardrailDecision(
                 action=Action.BLOCK,
