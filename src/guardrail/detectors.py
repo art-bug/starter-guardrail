@@ -388,3 +388,48 @@ class FuzzyKeywordDetector(Detector):
                             return Signal(rule.action, rule.reason_code)
 
         return None
+
+
+class WordOverlapDetector(Detector):
+    """Detect attacks based on word overlap with attack prototypes."""
+
+    def __init__(self, overlap_threshold: float = 0.55) -> None:
+        from guardrail.vector_detector import STARTER_ATTACK_PROTOTYPES
+        self._overlap_threshold = overlap_threshold
+        # Pre-compute word sets for each attack prototype
+        self._attack_word_sets: list[tuple[str, set[str]]] = []
+        for proto in STARTER_ATTACK_PROTOTYPES:
+            words = set(proto.text.lower().split())
+            # Remove very common words
+            words -= {"a", "an", "the", "to", "of", "and", "or", "in", "on", "for", "with", "my", "me", "i"}
+            self._attack_word_sets.append((proto.label, words))
+
+    def detect(self, text: str) -> Signal | None:
+        text_words = set(text.lower().split())
+        # Remove very common words
+        text_words -= {"a", "an", "the", "to", "of", "and", "or", "in", "on", "for", "with", "my", "me", "i"}
+
+        if not text_words:
+            return None
+
+        best_label = None
+        best_overlap = 0.0
+
+        for label, proto_words in self._attack_word_sets:
+            if not proto_words:
+                continue
+            # Jaccard-like overlap: intersection / smaller set
+            intersection = text_words & proto_words
+            smaller_set = min(len(text_words), len(proto_words))
+            if smaller_set == 0:
+                continue
+            overlap = len(intersection) / smaller_set
+
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_label = label
+
+        if best_overlap >= self._overlap_threshold and best_label is not None:
+            return Signal(Action.BLOCK, ReasonCode(best_label))
+
+        return None

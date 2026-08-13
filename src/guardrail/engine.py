@@ -11,6 +11,7 @@ from guardrail.detectors import (
     FuzzyKeywordDetector,
     OrderedKeywordDetector,
     StrongRegexDetector,
+    WordOverlapDetector,
 )
 from guardrail.normalization import normalize_text
 from guardrail.policy import ROUTE_ALLOW_REASONS, StarterPolicy
@@ -24,6 +25,7 @@ VOTE_WEIGHTS = {
     "keyword": 2.0,               # keyword detector — нужен corroboration
     "fuzzy": 1.5,                 # fuzzy matching — нужен corroboration
     "regex": 2.5,                 # regex patterns — нужен corroboration
+    "overlap": 2.5,
 }
 
 # Порог для блокировки (суммарный вес голосов)
@@ -49,6 +51,8 @@ class StarterGuardrail:
         self._fuzzy_detector = FuzzyKeywordDetector()
         self._vector_detector = create_starter_prototype_detector()
         self._regex_detector = StrongRegexDetector()
+        self._overlap_detector = WordOverlapDetector(overlap_threshold=0.55)
+
         self._policy = policy or StarterPolicy()
 
     def check(self, request: GuardrailRequest) -> GuardrailDecision:
@@ -132,6 +136,13 @@ class StarterGuardrail:
         if regex_signal is not None and regex_signal.action == Action.BLOCK:
             votes[regex_signal.reason_code.value].append(
                 (VOTE_WEIGHTS["regex"], "regex")
+            )
+
+        # === Word overlap detector ===
+        overlap_signal = self._overlap_detector.detect(text)
+        if overlap_signal is not None and overlap_signal.action == Action.BLOCK:
+            votes[overlap_signal.reason_code.value].append(
+                (VOTE_WEIGHTS["overlap"], "overlap")
             )
 
         # === Подсчёт голосов с corroboration bonus ===
