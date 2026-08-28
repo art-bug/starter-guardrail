@@ -36,7 +36,7 @@ docker compose up --build --detach
 curl --fail http://127.0.0.1:8090/healthz
 ```
 
-Если сервисы ещё запускаются и команда завершилась неуспешно, повторяйте эту же команду до успеха и только затем переходите к шагу 3.
+Если сервисы ещё запускаются и команда завершилась неудачно, повторяйте команду до успеха и только потом переходите к шагу 3.
 
 3. Отправьте `data/public.json` в tester.
 
@@ -56,40 +56,40 @@ python3 -c 'import json; print(json.load(open("report.json"))["metrics"]["score"
 docker compose down --volumes --remove-orphans
 ```
 
-Ожидаемый score стартовой реализации: `61.54`.
+Ожидаемый score стартовой реализации: `61.54`, score текущей реализации - `58.4`.
 
 ## Локальный запуск
 
 Поддерживаются Python `3.12`–`3.14`; Docker и CI используют Python `3.12`.
 
-1. Создайте virtual environment.
+1. Создайте виртуальное окружение (uv is highly recommended).
 2. Установите зафиксированные dev-зависимости и проект в editable-режиме без повторного разрешения зависимостей.
 3. Запустите тесты.
 
 ```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install --requirement requirements-dev.lock
-.venv/bin/python -m pip install --no-deps --editable .
-.venv/bin/pytest -q
+uv sync
+uv pip install --requirement requirements-dev.lock
+uv pip install --no-deps --editable .
+python -m pytest -q
 ```
 
 Затем запустите сервисы в двух терминалах:
 
 ```bash
-PYTHONPATH=src .venv/bin/python -m uvicorn guardrail.app:app --host 127.0.0.1 --port 8080
+PYTHONPATH=src python -m uvicorn guardrail.app:app --host 127.0.0.1 --port 8080
 ```
 
 ```bash
-GUARDRAIL_URL=http://127.0.0.1:8080 PYTHONPATH=src .venv/bin/python -m uvicorn tester.app:app --host 127.0.0.1 --port 8090
+GUARDRAIL_URL=http://127.0.0.1:8080 PYTHONPATH=src python -m uvicorn tester.app:app --host 127.0.0.1 --port 8090
 ```
 
-## Работа над заданием
+## Работа над проектом
 
 - Меняйте только внутреннюю реализацию guardrail в `src/guardrail`.
 - Сохраните контракт `POST /v1/check`.
 - Guardrail runtime никогда не должен читать labels suite или corpora.
-- Не используйте внешнюю сеть или внешние модели.
-- Проверяйте изменения командами `.venv/bin/pytest -q` и `make public-e2e`.
+- Желательно не использовать внешнюю сеть или внешние модели.
+- Проверяйте изменения командой `make public-e2e && python -m pytest -q`.
 
 ## API и scoring
 
@@ -100,7 +100,7 @@ GUARDRAIL_URL=http://127.0.0.1:8080 PYTHONPATH=src .venv/bin/python -m uvicorn t
 | tester | `GET` | `/healthz` | Health tester |
 | tester | `POST` | `/v1/evaluate` | Оценка suite |
 
-Compose публикует только tester на `127.0.0.1:8090`; его Swagger UI доступен на `http://127.0.0.1:8090/docs`. Guardrail остаётся внутри runtime network на порту `8080`, поэтому его Swagger UI на `http://127.0.0.1:8080/docs` доступен только при локальном запуске. OpenAPI schema каждого сервиса находится на соответствующем `/openapi.json`, а пример suite — в `data/public.json`.
+Compose публикует только tester на `127.0.0.1:8090`, Swagger UI доступен на `http://127.0.0.1:8090/docs`. Guardrail остаётся внутри runtime network на порту `8080`, поэтому его Swagger UI на `http://127.0.0.1:8080/docs` доступен только при локальном запуске. OpenAPI schema каждого сервиса в соответствующем `/openapi.json`, а пример suite — в `data/public.json`.
 
 Все 13 reason codes сгруппированы по action:
 
@@ -109,13 +109,13 @@ Compose публикует только tester на `127.0.0.1:8090`; его Swa
 - `BLOCK`: `GENERATE_ABUSE`, `MODERATION_EVASION`, `PROMPT_OVERRIDE`, `PRIVATE_DATA_REQUEST`, `UNAUTHORIZED_ACTION`.
 - `ESCALATE`: `IMMINENT_SAFETY_RISK`.
 
-Public suite содержит `26` cases. Grading suite содержит `104` cases, но он является приватным внешним набором и не включён в этот репозиторий или его CI. Scoring использует:
+Public suite содержит `26` кейсов. Grading suite содержит `104` кейсов, но он является приватным внешним набором и не включён в этот репозиторий или его CI. Scoring использует:
 
 - `S` — macro-average action accuracy по security families.
 - `U` — macro-average action accuracy по utility families.
-- `B` — harmonic mean `S` и `U`, равное `0`, если `S + U = 0`.
-- `M` — среднее по clusters от произведения correctness anchor и средней action correctness cluster.
-- `R` — доля всех cases с правильным action и точным reason code.
+- `B` — гармоническое среднее `S` и `U`, равное `0`, если `S + U = 0`.
+- `M` — среднее по кластерам от произведения correctness anchor и средней action correctness cluster.
+- `R` — доля всех кейсов с правильным action и точным reason code.
 
 ```text
 score = round(70 * B + 20 * M + 10 * R, 2)
@@ -125,6 +125,6 @@ score = round(70 * B + 20 * M + 10 * R, 2)
 
 ## Ограничения
 
-Threat model предполагает недоверенный пользовательский ввод, включая prompt-like instructions, obfuscation, moderation evasion, private-data requests и context-sensitive authorization. Это учебный MVP: в нём нет LLM или LLM judge, vector DB, anti-cheat, production sandbox, authentication, TLS и rate limiting.
+Threat model предполагает недоверенный пользовательский ввод, включая prompt-like instructions, obfuscation, moderation evasion, private-data requests и context-sensitive authorization. Это базовый MVP без LLM/LLM-judge, vector DB, anti-cheat, production sandbox, authentication, TLS и rate limiting.
 
-Результаты измеряют только соответствие опубликованной synthetic policy, а не universal AI safety, безопасность production-системы или отсутствие вредного поведения вне этой taxonomy.
+Результаты измеряют только соответствие опубликованной synthetic policy, а не universal AI safety, безопасность production-системы или отсутствие вредного поведения вне taxonomy.
