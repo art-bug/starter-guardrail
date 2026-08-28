@@ -73,7 +73,7 @@ uv pip install --no-deps --editable .
 python -m pytest -q
 ```
 
-Затем запустите сервисы в двух терминалах:
+Затем запустите два сервиса:
 
 ```bash
 PYTHONPATH=src python -m uvicorn guardrail.app:app --host 127.0.0.1 --port 8080
